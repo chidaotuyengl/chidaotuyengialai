@@ -9285,6 +9285,118 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // học viên" khiến hệ thống tạo ra hàng loạt hồ sơ không mong muốn). Admin tải LẠI đúng file Excel
   // đã lỡ nhập, hệ thống dò các học viên có tên trùng khớp trong file đó, liệt kê kèm ngày tạo hồ sơ
   // để Admin tự xem lại và tick chọn đúng người cần xóa — không tự động xóa hàng loạt mà không xác nhận.
+  // ---- Rà soát & bổ sung giai đoạn còn thiếu từ Excel — dùng khi 1 lần nhập trước đó đã bỏ sót
+  // một số giai đoạn (do tên khoa trong file không khớp được với danh mục hệ thống lúc đó). Admin
+  // tải LẠI đúng file Excel gốc; hệ thống tìm đúng hồ sơ đã có theo tên, đối chiếu từng dòng trong
+  // file với các giai đoạn đã ghi — dòng nào CHƯA có thì thử khớp lại bằng thuật toán khớp gần đúng
+  // mới rồi bổ sung thẳng vào hồ sơ đó (không tạo hồ sơ mới, không tạo trùng); dòng nào vẫn không
+  // khớp được thì liệt kê thành báo cáo để Admin xử lý tay.
+  function openHvBoSungGiaiDoanModal(content){
+    const overlay = el(`<div class="modal-overlay"><div class="modal" style="max-width:920px">
+      <h3>🔍 Rà soát & bổ sung giai đoạn còn thiếu (từ Excel)</h3>
+      <p class="muted" style="margin-top:-6px">Dùng khi 1 lần nhập trước đó đã bỏ sót giai đoạn do tên khoa không khớp. Tải LẠI đúng file Excel gốc — hệ thống sẽ tìm đúng hồ sơ đã có (theo tên), bổ sung thẳng những giai đoạn còn thiếu (không tạo hồ sơ mới, không trùng), và báo cáo những trường hợp vẫn chưa khớp được để anh xử lý tay.</p>
+      <input type="file" id="hbs-file" accept=".xlsx,.xls,.csv" style="margin-top:12px" />
+      <div id="hbs-result" style="margin-top:14px"></div>
+      <div class="row-flex" style="justify-content:flex-end;margin-top:14px">
+        <button class="secondary" id="hbs-close">Đóng</button>
+      </div>
+    </div></div>`);
+    root.appendChild(overlay);
+    overlay.querySelector('#hbs-close').onclick = ()=>{ overlay.remove(); renderTraineeListView(content); };
+    overlay.querySelector('#hbs-file').onchange = async (e)=>{
+      const file = e.target.files[0];
+      if (!file) return;
+      const resultBox = overlay.querySelector('#hbs-result');
+      resultBox.innerHTML = `<div class="empty">Đang đọc và đối chiếu file…</div>`;
+      let rows;
+      try {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type:'array', cellDates:true });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { defval:'' });
+      } catch(err){
+        resultBox.innerHTML = `<div class="empty">Lỗi khi đọc file: ${err.message}</div>`;
+        return;
+      }
+      if (!rows.length){ resultBox.innerHTML = '<div class="empty">File không có dữ liệu.</div>'; return; }
+      const hoTenCol = findCol(rows[0], ['họ','tên']);
+      const khoaCol = findCol(rows[0], ['khoa','thực','hành']) || findCol(rows[0], ['khoa','phân','công']);
+      const tuNgayGdCol = findCol(rows[0], ['từ','ngày']);
+      const denNgayGdCol = findCol(rows[0], ['đến','ngày']);
+      const nguoiHDCol = findCol(rows[0], ['người','hướng','dẫn']);
+      if (!hoTenCol || !khoaCol || !tuNgayGdCol){ resultBox.innerHTML = '<div class="empty">File thiếu cột "Họ và tên" / "Khoa đang thực hành" / "Từ ngày" — kiểm tra lại đúng file mẫu.</div>'; return; }
+      const normName = s => String(s||'').trim().replace(/\s+/g,' ').toLowerCase();
+      const added = []; // { hoTen, maHoSo, khoa }
+      const unresolved = []; // { hoTen, maHoSo, khoaTen, tuNgay, denNgay, lyDo }
+      const notFoundProfile = new Set();
+      const ambiguousProfile = new Set();
+      const touched = new Map(); // id -> trainee (cần lưu)
+      for (const row of rows){
+        const hoTen = toVNUpperName(String(row[hoTenCol]||'').trim());
+        const khoaTen = String(row[khoaCol]||'').trim();
+        const tuNgayGd = parseExcelDate(row[tuNgayGdCol]);
+        if (!hoTen || !khoaTen || !tuNgayGd) continue;
+        const key = normName(hoTen);
+        const matches = (state.trainees||[]).filter(t=> normName(t.hoTen)===key);
+        if (!matches.length){ notFoundProfile.add(hoTen); continue; }
+        if (matches.length > 1){ ambiguousProfile.add(hoTen); continue; }
+        const t = matches[0];
+        const denNgayGd = parseExcelDate(row[denNgayGdCol]);
+        // Đã có giai đoạn này chưa? (trùng khoa + từ ngày → coi như đã ghi rồi, bỏ qua)
+        const daCo = (t.giaiDoan||[]).some(s=> s.tuNgay===tuNgayGd && (normalizeKhoaName(s.khoa)===normalizeKhoaName(khoaTen) || s.khoa===khoaTen));
+        if (daCo) continue;
+        const { unit, matchType, candidates } = findUnitFuzzy(khoaTen);
+        if (!unit){
+          unresolved.push({
+            hoTen, maHoSo: t.maHoSo, khoaTen, tuNgay: tuNgayGd, denNgay: denNgayGd||'',
+            lyDo: (candidates && candidates.length>1) ? ('Khớp gần đúng với nhiều khoa: '+candidates.map(c=>c.name).join(', ')) : 'Không tìm thấy khoa trong danh mục',
+          });
+          continue;
+        }
+        const nguoiHDTen = String(row[nguoiHDCol]||'').trim();
+        let nguoiHD = null;
+        if (nguoiHDTen) nguoiHD = state.employees.find(e2=> e2.donViId===unit.id && (e2.hoTen||'').trim().toLowerCase()===nguoiHDTen.toLowerCase()) || state.employees.find(e2=>(e2.hoTen||'').trim().toLowerCase()===nguoiHDTen.toLowerCase());
+        const today = todayISO();
+        const trangThaiGd = (denNgayGd && denNgayGd < today) ? 'Đã kết thúc' : (tuNgayGd <= today ? 'Đang thực hành' : 'Chưa bắt đầu');
+        t.giaiDoan.push({
+          id: uid('gd'), khoaId: unit.id, khoa: unit.name,
+          nguoiHuongDanId: nguoiHD ? nguoiHD.id : '', nguoiHuongDan: nguoiHD ? nguoiHD.hoTen : nguoiHDTen,
+          tuNgay: tuNgayGd, denNgay: denNgayGd || '',
+          trangThai: trangThaiGd, noiDung:'', ketQua:'Chưa đánh giá', nhanXet:'',
+          minhChungFile:'', minhChungFileType:'', minhChungFileName:'', minhChungLink:'',
+        });
+        added.push({ hoTen, maHoSo: t.maHoSo, khoa: unit.name, matchType });
+        touched.set(t.id, t);
+      }
+      touched.forEach(t=> recomputeTraineeOverallStatus(t));
+      resultBox.innerHTML = `<div class="empty">Đang lưu ${touched.size} hồ sơ vừa bổ sung…</div>`;
+      try { await Promise.all(Array.from(touched.values()).map(t=> saveTrainee(t))); }
+      catch(err){ /* saveTrainee đã tự alert lỗi từng người nếu có */ }
+      resultBox.innerHTML = `
+        <div class="card" style="background:#eefaf0">
+          <h3 style="font-size:14px">✅ Đã bổ sung ${added.length} giai đoạn còn thiếu vào ${touched.size} hồ sơ</h3>
+          ${added.length ? `<div class="scroll-table-wrap"><table>
+            <thead><tr><th>Họ tên</th><th>Mã hồ sơ</th><th>Khoa đã bổ sung</th><th>Ghi chú</th></tr></thead>
+            <tbody>${added.map(a=>`<tr><td>${a.hoTen}</td><td>${a.maHoSo}</td><td>${a.khoa}</td><td>${a.matchType!=='exact'?'🔎 Khớp gần đúng — kiểm tra lại giúp em':''}</td></tr>`).join('')}</tbody>
+          </table></div>` : ''}
+        </div>
+        ${unresolved.length ? `
+        <div class="card" style="background:#fff7e6;margin-top:12px">
+          <h3 style="font-size:14px">⚠️ ${unresolved.length} giai đoạn CHƯA khớp được — cần xử lý tay</h3>
+          <div class="scroll-table-wrap"><table>
+            <thead><tr><th>Họ tên</th><th>Mã hồ sơ</th><th>Khoa ghi trong file</th><th>Từ ngày</th><th>Đến ngày</th><th>Lý do</th></tr></thead>
+            <tbody>${unresolved.map(u=>`<tr><td>${u.hoTen}</td><td>${u.maHoSo}</td><td>${u.khoaTen}</td><td>${fmtDateRange(u.tuNgay,u.tuNgay)}</td><td>${u.denNgay?fmtDateRange(u.denNgay,u.denNgay):'—'}</td><td>${u.lyDo}</td></tr>`).join('')}</tbody>
+          </table></div>
+          <p class="muted" style="margin-top:8px">Anh vào "Phân khoa" của từng người để bổ sung tay đúng khoa, hoặc vào "Quản lý đơn vị" đổi/thêm tên khoa cho khớp rồi làm lại bước này.</p>
+        </div>` : ''}
+        ${(notFoundProfile.size || ambiguousProfile.size) ? `
+        <div class="card" style="background:#fdecea;margin-top:12px">
+          ${notFoundProfile.size ? `<p>❌ Không tìm thấy hồ sơ nào tên: ${Array.from(notFoundProfile).join(', ')} — có thể chưa nhập hồ sơ người này.</p>` : ''}
+          ${ambiguousProfile.size ? `<p>⚠️ Có NHIỀU hồ sơ trùng tên (nghi còn sót trùng lặp cũ): ${Array.from(ambiguousProfile).join(', ')} — anh dùng nút "🗑️ Xóa hàng loạt học viên nhập nhầm từ Excel" để dọn trùng trước, rồi làm lại bước này.</p>` : ''}
+        </div>` : ''}
+      `;
+    };
+  }
   function openHvUndoImportModal(content){
     const overlay = el(`<div class="modal-overlay"><div class="modal" style="max-width:900px">
       <h3>🗑️ Xóa hàng loạt học viên nhập nhầm từ Excel</h3>
@@ -9410,6 +9522,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <button id="hv-add">➕ Tiếp nhận học viên mới</button>
             <button class="secondary" id="hv-bulk-import">📥 Nhập nhiều học viên từ Excel</button>
             <button class="secondary" id="hv-undo-import" title="Dùng khi vừa lỡ tải nhầm 1 file Excel khiến hệ thống tạo ra hàng loạt hồ sơ không mong muốn — tải lại đúng file đó để tìm và xóa đúng những hồ sơ bị nhập nhầm">🗑️ Xóa hàng loạt học viên nhập nhầm từ Excel</button>
+            <button class="secondary" id="hv-bosung-giaidoan" title="Dùng khi 1 lần nhập trước đã bỏ sót giai đoạn do tên khoa không khớp — tải lại đúng file Excel gốc để bổ sung thẳng vào hồ sơ đã có, không tạo trùng">🔍 Rà soát & bổ sung giai đoạn còn thiếu</button>
             <button class="secondary" id="hv-impersonate-new" title="Mở đúng màn hình mà học viên tự thấy để nhập giúp từ đầu (khai báo, đính kèm, ký điện tử...) — hữu ích khi học viên không rành máy tính, nhờ nhân viên nhập giúp tại quầy">👤 Đóng vai học viên nhập hồ sơ mới</button>
             <button class="secondary" id="hv-qr-register">📱 QR đăng ký cho học viên mới</button>
           ` : ''}
@@ -9556,6 +9669,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (document.getElementById('hv-add')) document.getElementById('hv-add').onclick = ()=> openTraineeFormModal(null);
     if (document.getElementById('hv-bulk-import')) document.getElementById('hv-bulk-import').onclick = ()=> openHvBulkImportModal(content);
     if (document.getElementById('hv-undo-import')) document.getElementById('hv-undo-import').onclick = ()=> openHvUndoImportModal(content);
+    if (document.getElementById('hv-bosung-giaidoan')) document.getElementById('hv-bosung-giaidoan').onclick = ()=> openHvBoSungGiaiDoanModal(content);
     if (document.getElementById('hv-impersonate-new')) document.getElementById('hv-impersonate-new').onclick = async ()=>{
       const newTrainee = {
         id: uid('hv'), maHoSo: genMaHoSo(), daNopHoSo: true, giaiDoan: [], trangThaiTongThe: 'Chưa bắt đầu',
