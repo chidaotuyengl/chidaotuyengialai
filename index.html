@@ -9226,6 +9226,90 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
     };
   }
+  // ---- Xóa hàng loạt học viên bị nhập NHẦM từ file Excel (ví dụ: lỡ tải lên đúng file "Nhập nhiều
+  // học viên" khiến hệ thống tạo ra hàng loạt hồ sơ không mong muốn). Admin tải LẠI đúng file Excel
+  // đã lỡ nhập, hệ thống dò các học viên có tên trùng khớp trong file đó, liệt kê kèm ngày tạo hồ sơ
+  // để Admin tự xem lại và tick chọn đúng người cần xóa — không tự động xóa hàng loạt mà không xác nhận.
+  function openHvUndoImportModal(content){
+    const overlay = el(`<div class="modal-overlay"><div class="modal" style="max-width:900px">
+      <h3>🗑️ Xóa hàng loạt học viên nhập nhầm từ Excel</h3>
+      <p class="muted" style="margin-top:-6px">Dùng khi vừa lỡ tải lên 1 file Excel (qua "📥 Nhập nhiều học viên từ Excel") khiến hệ thống tạo ra hàng loạt hồ sơ không mong muốn. Tải LẠI đúng file Excel đó lên đây — hệ thống sẽ tìm các học viên có tên trùng khớp, hiển thị để anh/chị xem lại và tick chọn đúng người cần xóa (không tự xóa khi chưa xác nhận).</p>
+      <input type="file" id="hui-file" accept=".xlsx,.xls,.csv" style="margin-top:12px" />
+      <div id="hui-result" style="margin-top:14px"></div>
+      <div class="row-flex" style="justify-content:flex-end;margin-top:14px">
+        <button class="secondary" id="hui-close">Đóng</button>
+      </div>
+    </div></div>`);
+    root.appendChild(overlay);
+    overlay.querySelector('#hui-close').onclick = ()=>{ overlay.remove(); renderTraineeListView(content); };
+    overlay.querySelector('#hui-file').onchange = async (e)=>{
+      const file = e.target.files[0];
+      if (!file) return;
+      const resultBox = overlay.querySelector('#hui-result');
+      resultBox.innerHTML = `<div class="empty">Đang đọc file…</div>`;
+      let rows;
+      try {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type:'array', cellDates:true });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, { defval:'' });
+      } catch(err){
+        resultBox.innerHTML = `<div class="empty">Lỗi khi đọc file: ${err.message}</div>`;
+        return;
+      }
+      if (!rows.length){ resultBox.innerHTML = '<div class="empty">File không có dữ liệu.</div>'; return; }
+      const hoTenCol = findCol(rows[0], ['họ','tên']);
+      if (!hoTenCol){ resultBox.innerHTML = '<div class="empty">Không tìm thấy cột "Họ và tên" trong file — kiểm tra lại đúng file mẫu nhập học viên.</div>'; return; }
+      // Gom tên duy nhất từ file (không phân biệt hoa/thường, khoảng trắng thừa)
+      const norm = s => String(s||'').trim().replace(/\s+/g,' ').toLowerCase();
+      const namesInFile = new Set();
+      for (const row of rows){ const n = norm(row[hoTenCol]); if (n) namesInFile.add(n); }
+      if (!namesInFile.size){ resultBox.innerHTML = '<div class="empty">File không có tên học viên nào.</div>'; return; }
+      // Tìm học viên trùng tên trong dữ liệu hiện có
+      const matches = (state.trainees||[]).filter(t=> namesInFile.has(norm(t.hoTen)));
+      if (!matches.length){
+        resultBox.innerHTML = `<div class="empty">Không tìm thấy học viên nào trong hệ thống trùng tên với ${namesInFile.size} người trong file này.</div>`;
+        return;
+      }
+      matches.sort((a,b)=> (b.createdAt||'').localeCompare(a.createdAt||''));
+      resultBox.innerHTML = `
+        <p class="muted">Tìm thấy <b>${matches.length}</b> hồ sơ học viên trùng tên với ${namesInFile.size} người trong file. Xem lại <b>Ngày tạo hồ sơ</b> và <b>Giai đoạn thực hành</b> bên dưới — bỏ tick những hồ sơ KHÔNG muốn xóa (ví dụ hồ sơ cũ, đã có trước khi lỡ nhập file này) trước khi bấm "Xóa các mục đã chọn".</p>
+        <div class="scroll-table-wrap">
+        <table>
+          <thead><tr><th style="width:30px"><input type="checkbox" id="hui-check-all" checked/></th><th>Họ tên</th><th>Mã hồ sơ</th><th>Ngày tạo hồ sơ</th><th>Giai đoạn thực hành đã ghi</th></tr></thead>
+          <tbody>${matches.map(t=>`
+            <tr>
+              <td style="text-align:center"><input type="checkbox" class="hui-check" data-id="${t.id}" checked/></td>
+              <td>${t.hoTen}</td>
+              <td>${t.maHoSo||''}</td>
+              <td>${t.createdAt||'—'}</td>
+              <td>${(t.giaiDoan&&t.giaiDoan.length) ? t.giaiDoan.map(g=>`${g.khoa} (${fmtDateRange(g.tuNgay,g.denNgay)})`).join('<br>') : '—'}</td>
+            </tr>`).join('')}</tbody>
+        </table>
+        </div>
+        <div class="row-flex" style="justify-content:flex-end;margin-top:12px">
+          <button id="hui-delete-selected" style="background:var(--red)">🗑️ Xóa các mục đã chọn</button>
+        </div>
+      `;
+      resultBox.querySelector('#hui-check-all').onchange = (e)=>{
+        resultBox.querySelectorAll('.hui-check').forEach(cb=> cb.checked = e.target.checked);
+      };
+      resultBox.querySelector('#hui-delete-selected').onclick = async ()=>{
+        const ids = Array.from(resultBox.querySelectorAll('.hui-check:checked')).map(cb=> cb.getAttribute('data-id'));
+        if (!ids.length){ alert('Chưa chọn hồ sơ nào để xóa.'); return; }
+        if (!confirm(`Xác nhận XÓA ${ids.length} hồ sơ học viên đã chọn? Hành động này KHÔNG THỂ hoàn tác.`)) return;
+        const btn = resultBox.querySelector('#hui-delete-selected');
+        btn.disabled = true; btn.textContent = 'Đang xóa…';
+        // Xóa song song (Promise.all) thay vì tuần tự từng người, giống các thao tác hàng loạt khác trong app.
+        await Promise.all(ids.map(id=> deleteTraineeStorage(id)));
+        const idSet = new Set(ids);
+        state.trainees = state.trainees.filter(x=> !idSet.has(x.id));
+        overlay.remove();
+        renderTraineeListView(content);
+        alert(`Đã xóa ${ids.length} hồ sơ học viên.`);
+      };
+    };
+  }
   function renderTraineeListView(content){
     if (!state._hvFilter) state._hvFilter = { q:'', trangThai:'', pheDuyet:'', loaiHinh:'', hoSo:'', special:'', specialLabel:'' };
     if (state._hvToolbarCollapsed === undefined) state._hvToolbarCollapsed = false;
@@ -9265,6 +9349,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           ${!isReadOnlyRole(state.adminRole) ? `
             <button id="hv-add">➕ Tiếp nhận học viên mới</button>
             <button class="secondary" id="hv-bulk-import">📥 Nhập nhiều học viên từ Excel</button>
+            <button class="secondary" id="hv-undo-import" title="Dùng khi vừa lỡ tải nhầm 1 file Excel khiến hệ thống tạo ra hàng loạt hồ sơ không mong muốn — tải lại đúng file đó để tìm và xóa đúng những hồ sơ bị nhập nhầm">🗑️ Xóa hàng loạt học viên nhập nhầm từ Excel</button>
             <button class="secondary" id="hv-impersonate-new" title="Mở đúng màn hình mà học viên tự thấy để nhập giúp từ đầu (khai báo, đính kèm, ký điện tử...) — hữu ích khi học viên không rành máy tính, nhờ nhân viên nhập giúp tại quầy">👤 Đóng vai học viên nhập hồ sơ mới</button>
             <button class="secondary" id="hv-qr-register">📱 QR đăng ký cho học viên mới</button>
           ` : ''}
@@ -9408,6 +9493,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (clearSpecialBtn) clearSpecialBtn.onclick = ()=>{ state._hvFilter = { q:fv.q, trangThai:'', pheDuyet:'', hoSo:'', special:'', specialLabel:'' }; renderTraineeListView(content); };
     if (document.getElementById('hv-add')) document.getElementById('hv-add').onclick = ()=> openTraineeFormModal(null);
     if (document.getElementById('hv-bulk-import')) document.getElementById('hv-bulk-import').onclick = ()=> openHvBulkImportModal(content);
+    if (document.getElementById('hv-undo-import')) document.getElementById('hv-undo-import').onclick = ()=> openHvUndoImportModal(content);
     if (document.getElementById('hv-impersonate-new')) document.getElementById('hv-impersonate-new').onclick = async ()=>{
       const newTrainee = {
         id: uid('hv'), maHoSo: genMaHoSo(), daNopHoSo: true, giaiDoan: [], trangThaiTongThe: 'Chưa bắt đầu',
