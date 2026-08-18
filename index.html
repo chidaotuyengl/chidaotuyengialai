@@ -7759,7 +7759,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             const u = unitOptions.find(x=> (x.name||'').toLowerCase().includes(phrase) && !pool.some(p=>p.id===x.id));
             if (u) pool.push(u);
           });
-          const idSet = new Set(fallbackKhoaList.filter(k=>pool.some(p=>p.id===k.khoaId) && !k.isFixed).map(k=>k.khoaId));
+          // Lớp bảo vệ độc lập: các dòng "chuyên khoa chính cố định" (RHM/YHCT/PHCN...) luôn có
+          // số tháng DÀI (≥3 tháng theo đúng Phụ lục I), còn các dòng THẬT SỰ cần rải/quay vòng
+          // (Cấp cứu, HSTC-CĐ, "Nhóm 6 — Chuyên khoa lẻ" của mẫu Bác sĩ Y khoa/YHDP) luôn NGẮN
+          // (≤2 tháng). Chỉ rải các dòng ngắn — không phụ thuộc riêng vào cờ isFixed — để chắc chắn
+          // không bao giờ vô tình đổi mất khoa chuyên khoa chính dù cờ isFixed vì lý do gì đó chưa
+          // được ghi nhận đúng lúc tạo dự thảo (ví dụ mẫu cũ còn lưu từ trước khi có cờ này).
+          const idSet = new Set(fallbackKhoaList.filter(k=>pool.some(p=>p.id===k.khoaId) && !k.isFixed && parseFloat(k.soThang)<=2).map(k=>k.khoaId));
           return { ten: grp.ten, pool, idSet };
         }).filter(rp=> rp.pool.length > 1 && rp.idSet.size > 0);
         const startDate = body.querySelector('#bp-startdate').value || todayISO();
