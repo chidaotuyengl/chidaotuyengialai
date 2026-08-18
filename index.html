@@ -4219,7 +4219,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         });
       });
       function draftCountNow(khoaId, mIdx){ return draftAttributionNow.filter(a=>a.khoaId===khoaId && a.mIdx===mIdx).length; }
-      function draftStudentsAtNow(khoaId, mIdx){
+      function draftStudentsAtNow(khoaId, mo){
+        const mIdx = months.indexOf(mo);
         return draftAttributionNow.filter(a=>a.khoaId===khoaId && a.mIdx===mIdx).map(a=>{
           const d = activeDraftNow.find(x=>x._idx===a.draftIdx);
           return d ? { idx:a.draftIdx, hoTen:d.hoTen, rowIdx:a.rowIdx } : null;
