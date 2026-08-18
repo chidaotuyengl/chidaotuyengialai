@@ -4068,7 +4068,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     // họ có bao nhiêu đợt/giai đoạn trong hệ thống.
     const attribution = []; // { khoaId, monthIdx }
     (state.trainees||[]).forEach(t=>{
-      const segs = (t.giaiDoan||[]).filter(s=> !dotId || s.dotLapKeHoachId===dotId);
+      let segs;
+      if (!dotId) segs = t.giaiDoan||[];
+      else if (dotId.indexOf('nhap:')===0) segs = (t.dotNhap===dotId.slice(5)) ? (t.giaiDoan||[]) : [];
+      else segs = (t.giaiDoan||[]).filter(s=> s.dotLapKeHoachId===dotId);
       if (!segs.length) return;
       months.forEach((mo, mIdx)=>{
         const khoaId = khoaChiemUuTheTrongThang(segs, mo);
@@ -4082,18 +4085,27 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         // (giúp Trưởng phòng CĐT nhận ra khoa nào đang trống để cân đối, đúng như bảng dự thảo).
     return { months, rows };
   }
-  // Danh sách các "đợt lập kế hoạch" đã từng áp dụng (có tên, không rỗng), suy ra từ dữ liệu
-  // giaiDoan hiện có — dùng để đổ vào dropdown lọc trên bảng tải trọng, kèm số học viên mỗi đợt.
+  // Danh sách các "đợt" để lọc trên bảng tải trọng — gộp CẢ 2 nguồn: (1) đợt được tạo qua "Lập kế
+  // hoạch phân bổ hàng loạt" (đánh dấu qua s.dotLapKeHoachId trên từng giai đoạn), và (2) đợt nhập
+  // hàng loạt từ Excel (đánh dấu qua t.dotNhap trên từng học viên, dùng tiền tố "nhap:" để phân biệt
+  // ID với loại đợt kia) — để Trưởng phòng CĐT xem/so sánh tải trọng của TỪNG đợt bất kỳ nguồn nào.
   function danhSachDotLapKeHoach(){
     const map = {};
     (state.trainees||[]).forEach(t=>{
       (t.giaiDoan||[]).forEach(s=>{
         if (!s.dotLapKeHoachId || !s.dotLapKeHoachTen) return;
-        if (!map[s.dotLapKeHoachId]) map[s.dotLapKeHoachId] = { id:s.dotLapKeHoachId, ten:s.dotLapKeHoachTen, count:0 };
+        if (!map[s.dotLapKeHoachId]) map[s.dotLapKeHoachId] = { id:s.dotLapKeHoachId, ten:'🗓️ '+s.dotLapKeHoachTen, count:0 };
         map[s.dotLapKeHoachId].count++;
       });
     });
-    return Object.values(map).sort((a,b)=> a.ten.localeCompare(b.ten,'vi'));
+    const nhapMap = {};
+    (state.trainees||[]).forEach(t=>{
+      if (!t.dotNhap) return;
+      const id = 'nhap:'+t.dotNhap;
+      if (!nhapMap[id]) nhapMap[id] = { id, ten:'📥 '+t.dotNhap+' (nhập Excel)', count:0 };
+      nhapMap[id].count++;
+    });
+    return Object.values(map).concat(Object.values(nhapMap)).sort((a,b)=> a.ten.localeCompare(b.ten,'vi'));
   }
   // ---- Xem trước tải trọng của MỘT DỰ THẢO (chưa lưu vào hệ thống) trong "Lập kế hoạch phân bổ
   // hàng loạt" — cộng dồn với tải ĐÃ CÓ SẴN trong hệ thống để thấy đúng bức tranh thật sau khi áp
@@ -4123,12 +4135,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     // Với mỗi học viên (thật + dự thảo), xác định trước khoa "chiếm ưu thế" (nhiều ngày nhất) của
     // TỪNG tháng — đảm bảo mỗi học viên chỉ góp 1 lần cho mỗi tháng, không thiếu không thừa, kể cả
     // tháng đầu tiên khi ngày bắt đầu không phải mùng 1 (VD bắt đầu 17/8 vẫn được tính đúng ở T8).
-    const existingAttribution = []; // { khoaId, mIdx }
+    const existingAttribution = []; // { khoaId, mIdx, traineeId, hoTen }
     (state.trainees||[]).forEach(t=>{
       if (!(t.giaiDoan||[]).length) return;
       months.forEach((mo,mIdx)=>{
         const khoaId = khoaChiemUuTheTrongThang(t.giaiDoan, mo);
-        if (khoaId) existingAttribution.push({ khoaId, mIdx });
+        if (khoaId) existingAttribution.push({ khoaId, mIdx, traineeId:t.id, hoTen:t.hoTen, maHoSo:t.maHoSo });
       });
     });
     const draftAttribution = []; // { draftIdx, rowIdx, khoaId, mIdx }
@@ -4146,6 +4158,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     function existingCount(khoaId, mo){
       const mIdx = months.indexOf(mo);
       return existingAttribution.filter(a=>a.khoaId===khoaId && a.mIdx===mIdx).length;
+    }
+    // Danh sách học viên THẬT (đã có sẵn trong hệ thống, không phải dự thảo) đang chiếm chỗ tại
+    // 1 khoa + 1 tháng cụ thể — dùng để đối chiếu khi số "đã có" trông có vẻ bất thường, giúp phát
+    // hiện nhanh nếu có hồ sơ trùng lặp hoặc ghi sai khoa/ngày.
+    function existingStudentsAt(khoaId, mo){
+      const mIdx = months.indexOf(mo);
+      return existingAttribution.filter(a=>a.khoaId===khoaId && a.mIdx===mIdx);
     }
     function draftCount(khoaId, mo){
       const mIdx = months.indexOf(mo);
@@ -4233,7 +4252,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             else if (n>=3){ bg='#f1c40f'; color='#5a4a00'; }
             else if (n>=1){ bg='#a8e6b8'; color='#1e6b34'; }
             const addedN = r.added[idx];
-            const clickable = onEditTrainee && addedN>0;
+            const clickable = onEditTrainee && n>0;
             return '<td style="text-align:center;background:'+bg+';color:'+color+(clickable?';cursor:pointer;text-decoration:underline dotted':'')+'"'+
               (clickable ? ' data-heat-cell="'+r.khoaId+'::'+idx+'" title="Bấm để xem/sửa học viên đang chiếm chỗ ở đây"' : '') + '>'+
               (n>0 ? (r.existing[idx]+(addedN>0?' <b>+'+addedN+'</b>':'')+' = '+n) : '') +
@@ -4319,13 +4338,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const mo = months[+moIdx];
         const u = (state.config.units||[]).find(x=>x.id===khoaId);
         const students = liveDraftStudentsAt(khoaId, mo);
-        if (!students.length) return;
+        const existingHere = existingStudentsAt(khoaId, mo);
+        if (!students.length && !existingHere.length) return;
         const pop = el(`<div class="modal-overlay" style="z-index:10000"><div class="modal" id="cell-pop-modal" style="max-width:760px;width:92vw">
           <div class="row-flex" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
             <h3 style="margin:0">${u?u.name:''} — ${mo.label}</h3>
             <button type="button" class="secondary small-btn" id="cell-pop-zoom">🔍+ Phóng to</button>
           </div>
-          <p class="muted" style="margin-top:6px">${students.length} học viên trong dự thảo đang chiếm chỗ ở đây. Gõ tên khoa để lọc, chọn khoa mới rồi bấm <b>"💾 Lưu"</b> để đổi (chỉ đổi đúng tháng này, các tháng khác của họ giữ nguyên) — không cần mở cả lộ trình dài.</p>
+          ${existingHere.length ? `
+          <div class="card" style="background:#f4f4f4;margin-top:8px">
+            <p style="margin:0 0 6px 0;font-weight:600">📋 Đã có sẵn trong hệ thống (${existingHere.length} học viên, KHÔNG thuộc dự thảo này — chỉ để đối chiếu, không sửa được ở đây):</p>
+            <div style="max-height:160px;overflow:auto">
+              ${existingHere.map(s=>`<div style="padding:3px 0;border-bottom:1px dashed #ddd">${s.hoTen}${s.maHoSo?' — '+s.maHoSo:''}</div>`).join('')}
+            </div>
+            <p class="muted" style="margin:6px 0 0 0;font-size:12px">Nếu thấy tên bị lặp lại hoặc người không nên có mặt ở khoa/tháng này, vào "Danh sách học viên" tìm đúng người đó để kiểm tra/sửa lại giai đoạn thực hành của họ.</p>
+          </div>` : ''}
+          ${students.length ? `<p class="muted" style="margin-top:6px">${students.length} học viên trong dự thảo đang chiếm chỗ ở đây. Gõ tên khoa để lọc, chọn khoa mới rồi bấm <b>"💾 Lưu"</b> để đổi (chỉ đổi đúng tháng này, các tháng khác của họ giữ nguyên) — không cần mở cả lộ trình dài.</p>` : ''}
           <div id="cell-pop-list" style="max-height:340px;overflow:visible">
             ${students.map(s=>`
               <div class="row-flex" style="justify-content:space-between;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line);flex-wrap:nowrap">
@@ -7302,12 +7330,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       { search: ['hstc','hồi sức tích cực','chống độc'], soThang: 2, ghiChu: 'Nhóm 1 — Hồi sức cấp cứu (chọn 1 khoa 2 tháng) — xếp CUỐI lộ trình' },
     ]},
     { ten: 'Bác sĩ Răng Hàm Mặt — 12 tháng (Phụ lục I mục C)', stages: [
-      { search: ['răng hàm mặt','rhm'], soThang: 9, ghiChu: 'Chuyên khoa chính — cố định Khoa Răng Hàm Mặt 9 tháng' },
+      { search: ['răng hàm mặt','rhm'], soThang: 9, isFixed: true, ghiChu: 'Chuyên khoa chính — cố định Khoa Răng Hàm Mặt 9 tháng' },
       { search: ['cấp cứu'], soThang: 1, ghiChu: 'Nhóm 1 — Hồi sức cấp cứu (chọn 1 khoa 1 tháng) — xếp GẦN CUỐI để học viên vững tay nghề trước khi vào cấp cứu' },
       { search: ['hstc','hồi sức tích cực','chống độc'], soThang: 2, ghiChu: 'Nhóm 1 — Hồi sức cấp cứu (chọn 1 khoa 2 tháng) — xếp CUỐI lộ trình' },
     ]},
     { ten: 'Bác sĩ Y học cổ truyền — 12 tháng (Phụ lục I mục D)', stages: [
-      { search: ['y học cổ truyền','yhct'], soThang: 9 },
+      { search: ['y học cổ truyền','yhct'], soThang: 9, isFixed: true, ghiChu: 'Chuyên khoa chính — cố định Khoa Y học cổ truyền 9 tháng' },
       { search: ['cấp cứu'], soThang: 1, ghiChu: 'Hồi sức cấp cứu — xếp cuối lộ trình' },
       { search: ['hstc','hồi sức tích cực','chống độc'], soThang: 2, ghiChu: 'Hồi sức cấp cứu — xếp cuối lộ trình' },
     ]},
@@ -7321,7 +7349,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       { search: ['hstc','hồi sức tích cực','chống độc'], soThang: 2, ghiChu: 'Hồi sức cấp cứu — xếp cuối lộ trình' },
     ]},
     { ten: 'Y sĩ Y học cổ truyền — 9 tháng (Phụ lục I mục F)', stages: [
-      { search: ['y học cổ truyền','yhct'], soThang: 6 },
+      { search: ['y học cổ truyền','yhct'], soThang: 6, isFixed: true, ghiChu: 'Chuyên khoa chính — cố định Khoa Y học cổ truyền 6 tháng' },
       { search: ['cấp cứu'], soThang: 1, ghiChu: 'Hồi sức cấp cứu — xếp cuối lộ trình' },
       { search: ['hstc','hồi sức tích cực','chống độc'], soThang: 2, ghiChu: 'Hồi sức cấp cứu — xếp cuối lộ trình' },
     ]},
@@ -7341,7 +7369,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       { search: ['cấp cứu'], soThang: 1, ghiChu: 'Hồi sức cấp cứu — chỉ 1 khoa, xếp cuối lộ trình' },
     ]},
     { ten: 'Kỹ thuật Y — Phục hồi chức năng — 6 tháng (Phụ lục I mục I.3.2)', stages: [
-      { search: ['phục hồi chức năng','phcn'], soThang: 5 },
+      { search: ['phục hồi chức năng','phcn'], soThang: 5, isFixed: true, ghiChu: 'Chuyên khoa chính — cố định Khoa Phục hồi chức năng 5 tháng' },
       { search: ['cấp cứu'], soThang: 1, ghiChu: 'Hồi sức cấp cứu — chỉ 1 khoa, xếp cuối lộ trình' },
     ]},
     { ten: 'Kỹ thuật Y — Chẩn đoán hình ảnh — 6 tháng (Phụ lục I mục I.3.3)', stages: [
@@ -7382,7 +7410,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const khoaList = seed.stages.map(stage=>{
         const u = matchUnitByStage(units, stage);
         if (!u) report.push('"'+seed.ten+'": chưa tìm thấy khoa cho dòng "'+(stage.ghiChu||stage.search[0])+'" — cần tự chọn tay.');
-        return { khoaId: u ? u.id : '', khoaTen: u ? u.name : '', soThang: stage.soThang };
+        return { khoaId: u ? u.id : '', khoaTen: u ? u.name : '', soThang: stage.soThang, isFixed: !!stage.isFixed };
       });
       // Nếu đã có mẫu cùng tên trước đó thì cập nhật lại, không tạo trùng.
       const existing = state.config.rotationTemplates.find(t=>t.ten===seed.ten);
@@ -7641,7 +7669,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       body.querySelector('#bp-tpl-addrow').onclick = ()=>{ tplRows.push({khoaId:'',soThang:''}); refreshTplRows(); };
       body.querySelector('#bp-tpl-select').onchange = (e)=>{
         const tpl = (state.config.rotationTemplates||[]).find(x=>x.id===e.target.value);
-        if (tpl){ tplRows = tpl.khoaList.map(k=>({khoaId:k.khoaId, soThang:k.soThang})); body.querySelector('#bp-tpl-ten').value = tpl.ten; }
+        if (tpl){ tplRows = tpl.khoaList.map(k=>({khoaId:k.khoaId, soThang:k.soThang, isFixed: !!k.isFixed})); body.querySelector('#bp-tpl-ten').value = tpl.ten; }
         else { tplRows = [{khoaId:'',soThang:''}]; body.querySelector('#bp-tpl-ten').value=''; }
         refreshTplRows();
       };
@@ -7686,7 +7714,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         if (!selectedIds.size){ alert('Chưa chọn học viên nào ở Bước 1.'); return; }
         const validRows = tplRows.filter(r=>r.khoaId && parseFloat(r.soThang)>0);
         if (!validRows.length){ alert('Lộ trình luân khoa chưa hợp lệ — cần ít nhất 1 dòng đủ Khoa + số tháng.'); return; }
-        const fallbackKhoaList = validRows.map(r=>({ khoaId:r.khoaId, khoaTen:(unitOptions.find(u=>u.id===r.khoaId)||{}).name||'', soThang:parseFloat(r.soThang) }));
+        const fallbackKhoaList = validRows.map(r=>({ khoaId:r.khoaId, khoaTen:(unitOptions.find(u=>u.id===r.khoaId)||{}).name||'', soThang:parseFloat(r.soThang), isFixed: !!r.isFixed }));
         // Nhóm khoa tương đương theo ĐÚNG "Quy định cụ thể cho học viên thực hành cấp GPHN" + "Quy
         // định chung — các khoa lâm sàng tại bệnh viện" (33 khoa, 6 nhóm). Hễ 1 dòng lộ trình đang
         // trỏ tới 1 khoa thuộc nhóm dưới đây, mỗi học viên (theo SỐ THỨ TỰ i) sẽ được xếp vào 1 khoa
@@ -7715,7 +7743,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             const u = unitOptions.find(x=> (x.name||'').toLowerCase().includes(phrase) && !pool.some(p=>p.id===x.id));
             if (u) pool.push(u);
           });
-          const idSet = new Set(fallbackKhoaList.filter(k=>pool.some(p=>p.id===k.khoaId)).map(k=>k.khoaId));
+          const idSet = new Set(fallbackKhoaList.filter(k=>pool.some(p=>p.id===k.khoaId) && !k.isFixed).map(k=>k.khoaId));
           return { ten: grp.ten, pool, idSet };
         }).filter(rp=> rp.pool.length > 1 && rp.idSet.size > 0);
         const startDate = body.querySelector('#bp-startdate').value || todayISO();
