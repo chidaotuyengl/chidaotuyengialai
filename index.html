@@ -1241,6 +1241,28 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (candidates.length === 1) return { unit:candidates[0], matchType:'fuzzy' };
     return { unit:null, matchType:'', candidates };
   }
+  // Tìm nhân viên (người hướng dẫn) khớp với tên trong file Excel — ưu tiên đúng khoa trước, sau đó
+  // toàn viện; thử khớp chính xác → khớp sau khi chuẩn hoá (bỏ dấu, khoảng trắng thừa) → nếu vẫn
+  // không thấy trong đúng khoa thì thử toàn viện (trường hợp ghi nhầm/công tác kiêm nhiệm khoa khác).
+  function findEmployeeFuzzy(hoTen, donViId){
+    const raw = String(hoTen||'').trim();
+    if (!raw) return { employee:null, matchType:'' };
+    const norm = normalizeKhoaName(raw); // dùng chung hàm chuẩn hoá bỏ dấu/khoảng trắng
+    const tryFind = (pool)=>{
+      let e = pool.find(x=> (x.hoTen||'').trim().toLowerCase() === raw.toLowerCase());
+      if (e) return { employee:e, matchType:'exact' };
+      if (!norm) return null;
+      const cands = pool.filter(x=> normalizeKhoaName(x.hoTen) === norm);
+      if (cands.length === 1) return { employee:cands[0], matchType:'normalized' };
+      return null;
+    };
+    const sameUnit = (state.employees||[]).filter(e=> e.donViId===donViId);
+    let r = tryFind(sameUnit);
+    if (r) return r;
+    r = tryFind(state.employees||[]);
+    if (r) return r;
+    return { employee:null, matchType:'' };
+  }
   function bindNameUppercase(input){
     if (!input) return;
     input.addEventListener('blur', function(){ input.value = toVNUpperName(input.value.trim()); });
@@ -9238,7 +9260,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             if (matchType !== 'exact') warnings.push('"'+hoTen+'": đã tự nhận diện "'+khoaTen+'" → "'+unit.name+'" (khớp gần đúng) — anh kiểm tra lại giúp em nếu chưa đúng ý.');
             const nguoiHDTen = String(row[nguoiHDCol]||'').trim();
             let nguoiHD = null;
-            if (nguoiHDTen) nguoiHD = state.employees.find(e2=> e2.donViId===unit.id && (e2.hoTen||'').trim().toLowerCase()===nguoiHDTen.toLowerCase()) || state.employees.find(e2=>(e2.hoTen||'').trim().toLowerCase()===nguoiHDTen.toLowerCase());
+            if (nguoiHDTen){
+              const rHD = findEmployeeFuzzy(nguoiHDTen, unit.id);
+              nguoiHD = rHD.employee;
+              if (nguoiHD && rHD.matchType !== 'exact') warnings.push('"'+hoTen+'": đã tự nhận diện người hướng dẫn "'+nguoiHDTen+'" → "'+nguoiHD.hoTen+'" (khớp gần đúng) — anh kiểm tra lại giúp em nếu chưa đúng ý.');
+            }
             const trangThaiGd = (denNgayGd && denNgayGd < today) ? 'Đã kết thúc' : (tuNgayGd <= today ? 'Đang thực hành' : 'Chưa bắt đầu');
             newTrainee.giaiDoan.push({
               id: uid('gd'), khoaId: unit.id, khoa: unit.name,
@@ -9291,6 +9317,65 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // file với các giai đoạn đã ghi — dòng nào CHƯA có thì thử khớp lại bằng thuật toán khớp gần đúng
   // mới rồi bổ sung thẳng vào hồ sơ đó (không tạo hồ sơ mới, không tạo trùng); dòng nào vẫn không
   // khớp được thì liệt kê thành báo cáo để Admin xử lý tay.
+  // ---- Liên kết lại người hướng dẫn còn thiếu — dùng khi giai đoạn đã có đủ khoa + ngày nhưng
+  // "Người hướng dẫn" chỉ mới ghi TÊN (chữ) chứ chưa liên kết đúng hồ sơ nhân viên (do lúc nhập tên
+  // không khớp chính xác 100%) — khiến bác sĩ đó KHÔNG được tính vào tải trọng "đang hướng dẫn X/5".
+  // Quét toàn bộ giai đoạn hiện có, thử khớp lại bằng thuật toán gần đúng mới, tự liên kết những
+  // trường hợp khớp được, báo cáo những trường hợp vẫn không khớp để xử lý tay.
+  function openHvLinkMentorModal(content){
+    const overlay = el(`<div class="modal-overlay"><div class="modal" style="max-width:900px">
+      <h3>🔗 Liên kết lại người hướng dẫn còn thiếu</h3>
+      <p class="muted" style="margin-top:-6px">Quét toàn bộ giai đoạn đã có trong hệ thống: nếu giai đoạn nào đã ghi TÊN người hướng dẫn nhưng chưa liên kết đúng hồ sơ nhân viên (nên không được tính vào "đang hướng dẫn X/5"), hệ thống sẽ thử khớp lại bằng thuật toán gần đúng mới và tự liên kết. Không cần tải file nào — chạy trực tiếp trên dữ liệu đang có.</p>
+      <div id="lkm-result" style="margin-top:14px"><div class="empty">Đang quét…</div></div>
+      <div class="row-flex" style="justify-content:flex-end;margin-top:14px">
+        <button class="secondary" id="lkm-close">Đóng</button>
+      </div>
+    </div></div>`);
+    root.appendChild(overlay);
+    overlay.querySelector('#lkm-close').onclick = ()=>{ overlay.remove(); renderTraineeListView(content); };
+    setTimeout(async ()=>{
+      const resultBox = overlay.querySelector('#lkm-result');
+      const linked = []; // { hoTenHV, maHoSo, khoa, tenGhi, tenKhopDuoc }
+      const unresolved = []; // { hoTenHV, maHoSo, khoa, tenGhi }
+      const touched = new Map();
+      (state.trainees||[]).forEach(t=>{
+        (t.giaiDoan||[]).forEach(s=>{
+          if (s.nguoiHuongDanId) return; // đã có liên kết rồi, bỏ qua
+          const tenGhi = String(s.nguoiHuongDan||'').trim();
+          if (!tenGhi) return; // không ghi tên gì thì không có gì để liên kết
+          const r = findEmployeeFuzzy(tenGhi, s.khoaId);
+          if (r.employee){
+            s.nguoiHuongDanId = r.employee.id;
+            s.nguoiHuongDan = r.employee.hoTen;
+            linked.push({ hoTenHV:t.hoTen, maHoSo:t.maHoSo, khoa:s.khoa, tenGhi, tenKhopDuoc:r.employee.hoTen });
+            touched.set(t.id, t);
+          } else {
+            unresolved.push({ hoTenHV:t.hoTen, maHoSo:t.maHoSo, khoa:s.khoa, tenGhi });
+          }
+        });
+      });
+      resultBox.innerHTML = `<div class="empty">Đang lưu ${touched.size} hồ sơ vừa liên kết…</div>`;
+      try { await Promise.all(Array.from(touched.values()).map(t=> saveTrainee(t))); } catch(err){}
+      resultBox.innerHTML = `
+        <div class="card" style="background:#eefaf0">
+          <h3 style="font-size:14px">✅ Đã liên kết ${linked.length} giai đoạn vào đúng hồ sơ nhân viên (${touched.size} học viên bị ảnh hưởng)</h3>
+          ${linked.length ? `<div class="scroll-table-wrap"><table>
+            <thead><tr><th>Học viên</th><th>Mã hồ sơ</th><th>Khoa</th><th>Tên ghi trong hồ sơ</th><th>Đã khớp với nhân viên</th></tr></thead>
+            <tbody>${linked.map(x=>`<tr><td>${x.hoTenHV}</td><td>${x.maHoSo}</td><td>${x.khoa}</td><td>${x.tenGhi}</td><td>${x.tenKhopDuoc}</td></tr>`).join('')}</tbody>
+          </table></div>` : '<p class="muted">Không có giai đoạn nào cần liên kết lại (mọi thứ đã liên kết đúng từ trước).</p>'}
+        </div>
+        ${unresolved.length ? `
+        <div class="card" style="background:#fff7e6;margin-top:12px">
+          <h3 style="font-size:14px">⚠️ ${unresolved.length} giai đoạn vẫn KHÔNG khớp được — cần chọn tay</h3>
+          <div class="scroll-table-wrap"><table>
+            <thead><tr><th>Học viên</th><th>Mã hồ sơ</th><th>Khoa</th><th>Tên ghi trong hồ sơ</th></tr></thead>
+            <tbody>${unresolved.map(x=>`<tr><td>${x.hoTenHV}</td><td>${x.maHoSo}</td><td>${x.khoa}</td><td>${x.tenGhi}</td></tr>`).join('')}</tbody>
+          </table></div>
+          <p class="muted" style="margin-top:8px">Anh vào "Phân khoa" của từng người, chọn tay đúng người hướng dẫn cho giai đoạn tương ứng.</p>
+        </div>` : ''}
+      `;
+    }, 30);
+  }
   function openHvBoSungGiaiDoanModal(content){
     const overlay = el(`<div class="modal-overlay"><div class="modal" style="max-width:920px">
       <h3>🔍 Rà soát & bổ sung giai đoạn còn thiếu (từ Excel)</h3>
@@ -9355,7 +9440,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         }
         const nguoiHDTen = String(row[nguoiHDCol]||'').trim();
         let nguoiHD = null;
-        if (nguoiHDTen) nguoiHD = state.employees.find(e2=> e2.donViId===unit.id && (e2.hoTen||'').trim().toLowerCase()===nguoiHDTen.toLowerCase()) || state.employees.find(e2=>(e2.hoTen||'').trim().toLowerCase()===nguoiHDTen.toLowerCase());
+        if (nguoiHDTen){
+          const rHD = findEmployeeFuzzy(nguoiHDTen, unit.id);
+          nguoiHD = rHD.employee;
+        }
         const today = todayISO();
         const trangThaiGd = (denNgayGd && denNgayGd < today) ? 'Đã kết thúc' : (tuNgayGd <= today ? 'Đang thực hành' : 'Chưa bắt đầu');
         t.giaiDoan.push({
@@ -9523,6 +9611,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <button class="secondary" id="hv-bulk-import">📥 Nhập nhiều học viên từ Excel</button>
             <button class="secondary" id="hv-undo-import" title="Dùng khi vừa lỡ tải nhầm 1 file Excel khiến hệ thống tạo ra hàng loạt hồ sơ không mong muốn — tải lại đúng file đó để tìm và xóa đúng những hồ sơ bị nhập nhầm">🗑️ Xóa hàng loạt học viên nhập nhầm từ Excel</button>
             <button class="secondary" id="hv-bosung-giaidoan" title="Dùng khi 1 lần nhập trước đã bỏ sót giai đoạn do tên khoa không khớp — tải lại đúng file Excel gốc để bổ sung thẳng vào hồ sơ đã có, không tạo trùng">🔍 Rà soát & bổ sung giai đoạn còn thiếu</button>
+            <button class="secondary" id="hv-link-mentor" title="Dùng khi giai đoạn đã có khoa+ngày nhưng tên người hướng dẫn chưa liên kết đúng hồ sơ nhân viên, khiến bác sĩ đó không được tính vào tải trọng X/5 — quét và tự liên kết lại">🔗 Liên kết lại người hướng dẫn còn thiếu</button>
             <button class="secondary" id="hv-impersonate-new" title="Mở đúng màn hình mà học viên tự thấy để nhập giúp từ đầu (khai báo, đính kèm, ký điện tử...) — hữu ích khi học viên không rành máy tính, nhờ nhân viên nhập giúp tại quầy">👤 Đóng vai học viên nhập hồ sơ mới</button>
             <button class="secondary" id="hv-qr-register">📱 QR đăng ký cho học viên mới</button>
           ` : ''}
@@ -9670,6 +9759,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (document.getElementById('hv-bulk-import')) document.getElementById('hv-bulk-import').onclick = ()=> openHvBulkImportModal(content);
     if (document.getElementById('hv-undo-import')) document.getElementById('hv-undo-import').onclick = ()=> openHvUndoImportModal(content);
     if (document.getElementById('hv-bosung-giaidoan')) document.getElementById('hv-bosung-giaidoan').onclick = ()=> openHvBoSungGiaiDoanModal(content);
+    if (document.getElementById('hv-link-mentor')) document.getElementById('hv-link-mentor').onclick = ()=> openHvLinkMentorModal(content);
     if (document.getElementById('hv-impersonate-new')) document.getElementById('hv-impersonate-new').onclick = async ()=>{
       const newTrainee = {
         id: uid('hv'), maHoSo: genMaHoSo(), daNopHoSo: true, giaiDoan: [], trangThaiTongThe: 'Chưa bắt đầu',
