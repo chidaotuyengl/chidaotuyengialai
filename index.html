@@ -1208,6 +1208,39 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // ---------- Chuẩn hóa dữ liệu nhập: Họ tên viết HOA, CCCD chỉ giữ số ----------
   function toVNUpperName(str){ return (str||'').toUpperCase(); }
   function digitsOnlyStr(str){ return (str||'').replace(/[^\d]/g,''); }
+  // Bỏ dấu tiếng Việt + chuẩn hoá để so khớp gần đúng tên khoa/phòng (dữ liệu cũ hay lệch nội dung
+  // đôi chút so với danh mục hệ thống — ví dụ "Nhi" so với "Khoa Nhi", "Mắt" so với "Mắt-RHM-TMH"...).
+  function removeVNAccents(str){
+    return (str||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .replace(/đ/g,'d').replace(/Đ/g,'D');
+  }
+  function normalizeKhoaName(str){
+    return removeVNAccents(String(str||'').trim().toLowerCase())
+      .replace(/^(khoa|phong|to|don vi)\s+/,'')
+      .replace(/[-_.,]/g,' ')
+      .replace(/\s+/g,' ')
+      .trim();
+  }
+  // Tìm khoa/phòng khớp với tên trong file Excel — thử theo thứ tự: khớp chính xác (như cũ) →
+  // khớp chính xác sau khi chuẩn hoá (bỏ dấu, bỏ tiền tố "Khoa/Phòng") → khớp bao hàm (1 tên chứa tên kia),
+  // chỉ nhận khi DUY NHẤT 1 khoa thoả điều kiện bao hàm (tránh nhận nhầm khi có nhiều khoa gần giống nhau).
+  function findUnitFuzzy(khoaTen){
+    const raw = String(khoaTen||'').trim();
+    if (!raw) return { unit:null, matchType:'' };
+    const units = state.config.units||[];
+    let unit = units.find(u=> (u.name||'').trim().toLowerCase() === raw.toLowerCase());
+    if (unit) return { unit, matchType:'exact' };
+    const norm = normalizeKhoaName(raw);
+    if (!norm) return { unit:null, matchType:'' };
+    unit = units.find(u=> normalizeKhoaName(u.name) === norm);
+    if (unit) return { unit, matchType:'normalized' };
+    const candidates = units.filter(u=>{
+      const un = normalizeKhoaName(u.name);
+      return un && (un.includes(norm) || norm.includes(un));
+    });
+    if (candidates.length === 1) return { unit:candidates[0], matchType:'fuzzy' };
+    return { unit:null, matchType:'', candidates };
+  }
   function bindNameUppercase(input){
     if (!input) return;
     input.addEventListener('blur', function(){ input.value = toVNUpperName(input.value.trim()); });
@@ -9193,11 +9226,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             const tuNgayGd = parseExcelDate(row[tuNgayGdCol]);
             if (!khoaTen || !tuNgayGd) continue;
             const denNgayGd = parseExcelDate(row[denNgayGdCol]);
-            const unit = state.config.units.find(u=> (u.name||'').trim().toLowerCase() === khoaTen.toLowerCase());
+            const { unit, matchType, candidates } = findUnitFuzzy(khoaTen);
             if (!unit){
-              warnings.push('"'+hoTen+'": không tìm thấy khoa "'+khoaTen+'" trong danh mục Khoa/Phòng — chưa ghi giai đoạn '+khoaTen+', anh vào "Phân khoa" bổ sung tay giúp em.');
+              if (candidates && candidates.length > 1){
+                warnings.push('"'+hoTen+'": tên khoa "'+khoaTen+'" khớp gần đúng với NHIỀU khoa cùng lúc ('+candidates.map(c=>c.name).join(', ')+') — chưa ghi giai đoạn này, anh vào "Phân khoa" chọn đúng khoa giúp em.');
+              } else {
+                warnings.push('"'+hoTen+'": không tìm thấy khoa "'+khoaTen+'" trong danh mục Khoa/Phòng (kể cả khớp gần đúng) — chưa ghi giai đoạn '+khoaTen+', anh vào "Phân khoa" bổ sung tay giúp em.');
+              }
               continue;
             }
+            if (matchType !== 'exact') warnings.push('"'+hoTen+'": đã tự nhận diện "'+khoaTen+'" → "'+unit.name+'" (khớp gần đúng) — anh kiểm tra lại giúp em nếu chưa đúng ý.');
             const nguoiHDTen = String(row[nguoiHDCol]||'').trim();
             let nguoiHD = null;
             if (nguoiHDTen) nguoiHD = state.employees.find(e2=> e2.donViId===unit.id && (e2.hoTen||'').trim().toLowerCase()===nguoiHDTen.toLowerCase()) || state.employees.find(e2=>(e2.hoTen||'').trim().toLowerCase()===nguoiHDTen.toLowerCase());
