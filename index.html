@@ -1146,7 +1146,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <img src="${LOGO_SRC}" class="logo" alt="Logo bệnh viện" />
           <div class="title-block">
             <div class="org">Bệnh viện Đa khoa Trung tâm tỉnh Gia Lai</div>
-            <div class="title">Phòng Chỉ đạo tuyến — Quản lý Cập nhật kiến thức y khoa liên tục</div>
+            <div class="title">Phòng Chỉ đạo tuyến</div>
             <div style="opacity:0.6;font-size:10px;color:#fff">build ${APP_BUILD_VERSION}</div>
           </div>
         </div>
@@ -1191,7 +1191,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <img src="${LOGO_SRC}" class="logo" alt="Logo bệnh viện" />
           <div class="title-block">
             <div class="org">Bệnh viện Đa khoa Trung tâm tỉnh Gia Lai</div>
-            <div class="title">Phòng Chỉ đạo tuyến — Quản lý Cập nhật kiến thức y khoa liên tục</div>
+            <div class="title">Phòng Chỉ đạo tuyến</div>
             <div style="opacity:0.6;font-size:10px;color:#fff">build ${APP_BUILD_VERSION}</div>
           </div>
         </div>
@@ -2929,11 +2929,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return ua.localeCompare(ub,'vi') || a.hoTen.localeCompare(b.hoTen,'vi');
       });
     const notInPL2Count = list.filter(e=> !timHDTheoNhanVien(e)).length;
-    const byUnit = {};
+    // Nhóm theo ĐÚNG mã khoa (donViId) — KHÔNG nhóm theo tên hiển thị, vì nếu danh mục có 2 khoa
+    // trùng tên (2 mã khác nhau do lỗi nhập liệu cũ), nhóm theo tên sẽ gộp nhầm 2 khoa làm 1,
+    // khiến số ở đây không khớp với số thực tế khoa đó thấy khi tự chọn người hướng dẫn (nơi lọc
+    // đúng theo 1 mã donViId cụ thể).
+    const byUnitId = {};
     list.forEach(e=>{
-      const uName = (state.config.units.find(u=>u.id===e.donViId)||{}).name || '(Chưa rõ khoa/phòng)';
-      (byUnit[uName] = byUnit[uName]||[]).push(e);
+      const key = e.donViId || '__none__';
+      (byUnitId[key] = byUnitId[key]||[]).push(e);
     });
+    const nameCount = {};
+    Object.keys(byUnitId).forEach(uid=>{
+      const uName = uid==='__none__' ? '(Chưa rõ khoa/phòng)' : ((state.config.units.find(u=>u.id===uid)||{}).name || '(Mã khoa không còn tồn tại — có thể đã bị xoá)');
+      nameCount[uName] = (nameCount[uName]||0) + 1;
+    });
+    const trungTenList = Object.keys(nameCount).filter(n=>nameCount[n]>1);
     let sttCounter = 0;
     let ehmZoomed = false;
     const overlay = el(`<div class="modal-overlay"><div class="modal" style="max-width:940px;max-height:88vh;display:flex;flex-direction:column">
@@ -2945,13 +2955,21 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         </div>
       </div>
       <p class="muted" style="margin-top:6px">Đã đối chiếu từng người với danh sách chính thức Phụ lục II (${HD_LIST_PHULUC2.length} người) do Phòng CĐT cung cấp — khớp theo số CCHN trước, họ tên sau. ${notInPL2Count ? `<b style="color:#b3261e">⚠ ${notInPL2Count} người trong danh sách này KHÔNG có trong Phụ lục II</b> — xem đúng dòng đánh dấu ⚠ đỏ bên dưới, có thể bỏ tick ngay ở cột "Đủ ĐK" để tắt luôn tại đây, không cần mở màn khác.` : 'Tất cả đều khớp đúng với Phụ lục II — không có ai lệch.'}</p>
+      ${trungTenList.length ? `<p style="margin-top:8px;background:#fdecea;border:1px solid #f0b8b0;border-radius:6px;padding:8px 12px"><b style="color:#b3261e">⚠ Phát hiện ${trungTenList.length} tên khoa/phòng bị TRÙNG (2 mã khoa khác nhau nhưng cùng tên)</b>: ${trungTenList.join(', ')}. Đây chính là nguyên nhân số đếm ở đây có thể KHÔNG khớp với số khoa đó thấy khi tự chọn người hướng dẫn (màn đó lọc theo đúng 1 mã, còn đây đang hiện tách riêng từng mã bên dưới, đề để anh vào "Quản lý đơn vị" gộp/xoá bớt khoa trùng cho khớp).</p>` : ''}
       <input type="text" id="ehm-search" placeholder="🔍 Gõ tên người hoặc tên khoa/phòng để lọc nhanh..." style="margin-top:8px" />
       <div id="ehm-scroll" style="overflow:auto;flex:1;margin-top:8px">
-        ${Object.keys(byUnit).sort((a,b)=>a.localeCompare(b,'vi')).map(uName=>`
+        ${Object.keys(byUnitId).sort((a,b)=>{
+          const na = a==='__none__' ? '(Chưa rõ khoa/phòng)' : ((state.config.units.find(u=>u.id===a)||{}).name || '(Mã khoa không còn tồn tại)');
+          const nb = b==='__none__' ? '(Chưa rõ khoa/phòng)' : ((state.config.units.find(u=>u.id===b)||{}).name || '(Mã khoa không còn tồn tại)');
+          return na.localeCompare(nb,'vi');
+        }).map(uid=>{
+          const uName = uid==='__none__' ? '(Chưa rõ khoa/phòng)' : ((state.config.units.find(u=>u.id===uid)||{}).name || '(Mã khoa không còn tồn tại — có thể đã bị xoá)');
+          const isDup = trungTenList.includes(uName);
+          return `
           <div style="margin-bottom:10px" data-unit-block="${uName.toLowerCase()}">
-            <h4 style="margin:0 0 4px;color:#1f7a4d">${uName} (<span data-unit-count>${byUnit[uName].length}</span>)</h4>
+            <h4 style="margin:0 0 4px;color:#1f7a4d">${uName}${isDup ? ' <span style="color:#b3261e;font-size:11px;font-weight:normal">(mã: '+uid+' — ⚠ trùng tên với khoa khác)</span>' : ''} (<span data-unit-count>${byUnitId[uid].length}</span>)</h4>
             <table style="font-size:12.5px"><tbody>
-              ${byUnit[uName].map(e=>{
+              ${byUnitId[uid].map(e=>{
                 sttCounter++;
                 const inPL2 = !!timHDTheoNhanVien(e);
                 return `<tr data-emp-row="${e.id}" data-emp-name="${(e.hoTen||'').toLowerCase()}" style="${inPL2?'':'background:#fdecea'}">
@@ -2965,7 +2983,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               }).join('')}
             </tbody></table>
           </div>
-        `).join('')}
+        `;}).join('')}
       </div>
       <div class="row-flex" style="justify-content:flex-end;margin-top:10px">
         <button id="ehm-close">Đóng</button>
