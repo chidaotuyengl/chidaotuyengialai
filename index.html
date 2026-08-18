@@ -9104,9 +9104,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <h3>📥 Nhập nhiều học viên cùng lúc từ Excel</h3>
       <p class="muted" style="margin-top:-6px">Điền mỗi học viên 1 dòng vào file mẫu rồi tải lên. Hệ thống tự tạo hồ sơ, tự sinh <b>Mã hồ sơ</b> và <b>Mã xác nhận</b> (mặc định 4 số cuối CCCD) cho từng người — anh chỉ cần gửi lại đúng 2 mã đó (qua Zalo/tin nhắn) cho từng học viên để họ tự đăng nhập, tự khai báo và đính kèm phần hồ sơ còn lại của chính mình.</p>
       <p class="muted" style="margin-top:-6px">💡 Với học viên <b>đã/đang thực hành, đã có khoa phân công rồi</b> (không cần qua bước "chờ khoa xác nhận" nữa) — điền thêm 3 cột "Khoa đang/đã thực hành", "Từ ngày", "Đến ngày" trong file mẫu: hệ thống sẽ tự ghi thẳng thành giai đoạn thực hành đã xác nhận, không cần thao tác lại từng bước trên "Phân khoa".</p>
+      <p class="muted" style="margin-top:-6px">💡 Nếu 1 học viên có <b>nhiều dòng</b> (mỗi dòng 1 giai đoạn luân khoa khác nhau, cùng tên) — hệ thống tự <b>gộp thành 1 hồ sơ duy nhất</b> với đầy đủ các giai đoạn, không tạo trùng hồ sơ.</p>
       <div class="row-flex">
         <button class="secondary" id="hbi-template">📥 Tải file mẫu Excel</button>
       </div>
+      <label style="display:block;margin-top:12px;font-weight:600">🏷️ Nhãn đợt nhập (để lọc/tách riêng đợt này sau này)</label>
+      <input type="text" id="hbi-dot-nhap" placeholder="VD: Đợt nhập tháng 5/2026" value="Đợt nhập ${todayISO()}" style="width:100%;margin-top:4px" />
       <input type="file" id="hbi-file" accept=".xlsx,.xls,.csv" style="margin-top:12px" />
       <div id="hbi-result" style="margin-top:14px"></div>
       <div class="row-flex" style="justify-content:flex-end;margin-top:14px">
@@ -9134,69 +9137,83 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(sheet, { defval:'' });
         if (!rows.length){ resultBox.innerHTML = '<div class="empty">File không có dữ liệu.</div>'; return; }
+        const dotNhap = String(overlay.querySelector('#hbi-dot-nhap').value||'').trim() || ('Đợt nhập '+todayISO());
         const created = [];
         const errors = [];
         const warnings = [];
+        // Gộp các dòng CÙNG TÊN (không phân biệt hoa/thường, khoảng trắng thừa) thành 1 hồ sơ duy nhất
+        // có nhiều giai đoạn — tránh tạo trùng hồ sơ khi file có nhiều dòng/người (mỗi dòng 1 giai đoạn).
+        const normName = s => String(s||'').trim().replace(/\s+/g,' ').toLowerCase();
+        const groups = new Map(); // normName -> { hoTen gốc, rows: [...] }
+        const hoTenColGlobal = findCol(rows[0], ['họ','tên']);
         for (const row of rows){
-          const hoTenCol = findCol(row, ['họ','tên']);
-          const ngaySinhCol = findCol(row, ['ngày','sinh']);
-          const gioiTinhCol = findCol(row, ['giới','tính']);
-          const cccdCol = findCol(row, ['cccd']) || findCol(row, ['căn','cước']);
-          const chucDanhCol = findCol(row, ['chức','danh']);
-          const trinhDoCol = findCol(row, ['trình','độ']);
-          const donViCol = findCol(row, ['đơn','vị']) || findCol(row, ['trường']);
-          const soThangCol = findCol(row, ['tháng']);
-          const dtCol = findCol(row, ['điện','thoại']);
-          // 3 cột tuỳ chọn để nhập thẳng học viên ĐÃ CÓ khoa phân công (đã/đang thực hành từ trước) —
+          const hoTenRaw = toVNUpperName(String(row[hoTenColGlobal]||'').trim());
+          if (!hoTenRaw){ errors.push('Bỏ qua 1 dòng thiếu Họ và tên.'); continue; }
+          const key = normName(hoTenRaw);
+          if (!groups.has(key)) groups.set(key, { hoTen: hoTenRaw, rows: [] });
+          groups.get(key).rows.push(row);
+        }
+        for (const { hoTen, rows: personRows } of groups.values()){
+          const firstRow = personRows[0];
+          const ngaySinhCol = findCol(firstRow, ['ngày','sinh']);
+          const gioiTinhCol = findCol(firstRow, ['giới','tính']);
+          const cccdCol = findCol(firstRow, ['cccd']) || findCol(firstRow, ['căn','cước']);
+          const chucDanhCol = findCol(firstRow, ['chức','danh']);
+          const trinhDoCol = findCol(firstRow, ['trình','độ']);
+          const donViCol = findCol(firstRow, ['đơn','vị']) || findCol(firstRow, ['trường']);
+          const soThangCol = findCol(firstRow, ['tháng']);
+          const dtCol = findCol(firstRow, ['điện','thoại']);
+          // 3 cột tuỳ chọn để nhập thẳng giai đoạn ĐÃ CÓ khoa phân công (đã/đang thực hành từ trước) —
           // bỏ qua bước "chờ khoa xác nhận", ghi thẳng thành giai đoạn thực hành chính thức.
-          const khoaCol = findCol(row, ['khoa','thực','hành']) || findCol(row, ['khoa','phân','công']);
-          const tuNgayGdCol = findCol(row, ['từ','ngày']);
-          const denNgayGdCol = findCol(row, ['đến','ngày']);
-          const nguoiHDCol = findCol(row, ['người','hướng','dẫn']);
-          const hoTen = toVNUpperName(String(row[hoTenCol]||'').trim());
-          if (!hoTen){ errors.push('Bỏ qua 1 dòng thiếu Họ và tên.'); continue; }
-          const cccd = digitsOnlyStr(String(row[cccdCol]||''));
+          const khoaCol = findCol(firstRow, ['khoa','thực','hành']) || findCol(firstRow, ['khoa','phân','công']);
+          const tuNgayGdCol = findCol(firstRow, ['từ','ngày']);
+          const denNgayGdCol = findCol(firstRow, ['đến','ngày']);
+          const nguoiHDCol = findCol(firstRow, ['người','hướng','dẫn']);
+          const cccd = digitsOnlyStr(String(firstRow[cccdCol]||''));
           const newTrainee = {
             id: uid('hv'), maHoSo: genMaHoSo(), daNopHoSo: true, giaiDoan: [], trangThaiTongThe: 'Chưa bắt đầu',
             hoSoDinhKem: DOC_CHECKLIST_HV.map(d=>({ key:d.key, ten:d.ten, batBuoc:d.batBuoc, trangThai:'Chưa nộp', ngayNop:'', ghiChu:'' })),
-            ngayXacNhanHoanThanh:'', soGiayXacNhan:'', createdAt: todayISO(),
-            hoTen, ngaySinh: parseExcelDate(row[ngaySinhCol]), gioiTinh: String(row[gioiTinhCol]||'').trim(),
+            ngayXacNhanHoanThanh:'', soGiayXacNhan:'', createdAt: todayISO(), dotNhap,
+            hoTen, ngaySinh: parseExcelDate(firstRow[ngaySinhCol]), gioiTinh: String(firstRow[gioiTinhCol]||'').trim(),
             cccd, ngayCapCccd:'', noiCapCccd:'',
-            chucDanhDangKy: String(row[chucDanhCol]||'').trim() || CHUC_DANH_LIST()[0],
-            trinhDoDaoTao: String(row[trinhDoCol]||'').trim() || TRINH_DO_LIST()[0],
+            chucDanhDangKy: String(firstRow[chucDanhCol]||'').trim() || CHUC_DANH_LIST()[0],
+            trinhDoDaoTao: String(firstRow[trinhDoCol]||'').trim() || TRINH_DO_LIST()[0],
             loaiHinhThucHanh: LOAI_HINH_THUC_HANH_LIST()[0], mucDichThucHanh: '',
-            donViCuTri: String(row[donViCol]||'').trim(),
+            donViCuTri: String(firstRow[donViCol]||'').trim(),
             tuNgayDeNghi:'', denNgayDeNghi:'',
-            soThangDangKy: row[soThangCol] ? parseFloat(row[soThangCol]) : '',
-            nguoiLienHe:'', soDienThoai: String(row[dtCol]||'').trim(),
+            soThangDangKy: firstRow[soThangCol] ? parseFloat(firstRow[soThangCol]) : '',
+            nguoiLienHe:'', soDienThoai: String(firstRow[dtCol]||'').trim(),
             trangThaiHoSo: TRANG_THAI_HO_SO_HV[0], trangThaiPheDuyet: TRANG_THAI_PHE_DUYET_HV[0],
             ngayTiepNhan:'', soVanBanTiepNhan:'', ghiChuHoSo:'',
           };
-          // Nếu có điền khoa + ngày → ghi thẳng thành 1 giai đoạn thực hành đã xác nhận
-          const khoaTen = String(row[khoaCol]||'').trim();
-          const tuNgayGd = parseExcelDate(row[tuNgayGdCol]);
-          if (khoaTen && tuNgayGd){
+          // Mỗi dòng của người này có thể là 1 giai đoạn luân khoa riêng — ghi thẳng thành nhiều giai đoạn.
+          const today = todayISO();
+          for (const row of personRows){
+            const khoaTen = String(row[khoaCol]||'').trim();
+            const tuNgayGd = parseExcelDate(row[tuNgayGdCol]);
+            if (!khoaTen || !tuNgayGd) continue;
             const denNgayGd = parseExcelDate(row[denNgayGdCol]);
             const unit = state.config.units.find(u=> (u.name||'').trim().toLowerCase() === khoaTen.toLowerCase());
             if (!unit){
-              warnings.push('"'+hoTen+'": không tìm thấy khoa "'+khoaTen+'" trong danh mục Khoa/Phòng — chưa ghi giai đoạn thực hành, anh vào "Phân khoa" bổ sung tay giúp em.');
-            } else {
-              const nguoiHDTen = String(row[nguoiHDCol]||'').trim();
-              let nguoiHD = null;
-              if (nguoiHDTen) nguoiHD = state.employees.find(e2=> e2.donViId===unit.id && (e2.hoTen||'').trim().toLowerCase()===nguoiHDTen.toLowerCase()) || state.employees.find(e2=>(e2.hoTen||'').trim().toLowerCase()===nguoiHDTen.toLowerCase());
-              const today = todayISO();
-              const trangThaiGd = (denNgayGd && denNgayGd < today) ? 'Đã kết thúc' : (tuNgayGd <= today ? 'Đang thực hành' : 'Chưa bắt đầu');
-              newTrainee.giaiDoan.push({
-                id: uid('gd'), khoaId: unit.id, khoa: unit.name,
-                nguoiHuongDanId: nguoiHD ? nguoiHD.id : '', nguoiHuongDan: nguoiHD ? nguoiHD.hoTen : nguoiHDTen,
-                tuNgay: tuNgayGd, denNgay: denNgayGd || '',
-                trangThai: trangThaiGd, noiDung:'', ketQua:'Chưa đánh giá', nhanXet:'',
-                minhChungFile:'', minhChungFileType:'', minhChungFileName:'', minhChungLink:'',
-              });
-              if (nguoiHDTen && !nguoiHD) warnings.push('"'+hoTen+'": không tìm thấy nhân viên "'+nguoiHDTen+'" làm người hướng dẫn — đã ghi tên nhưng chưa liên kết được hồ sơ nhân viên, anh vào "Phân khoa" chọn lại giúp em.');
-              recomputeTraineeOverallStatus(newTrainee);
+              warnings.push('"'+hoTen+'": không tìm thấy khoa "'+khoaTen+'" trong danh mục Khoa/Phòng — chưa ghi giai đoạn '+khoaTen+', anh vào "Phân khoa" bổ sung tay giúp em.');
+              continue;
             }
+            const nguoiHDTen = String(row[nguoiHDCol]||'').trim();
+            let nguoiHD = null;
+            if (nguoiHDTen) nguoiHD = state.employees.find(e2=> e2.donViId===unit.id && (e2.hoTen||'').trim().toLowerCase()===nguoiHDTen.toLowerCase()) || state.employees.find(e2=>(e2.hoTen||'').trim().toLowerCase()===nguoiHDTen.toLowerCase());
+            const trangThaiGd = (denNgayGd && denNgayGd < today) ? 'Đã kết thúc' : (tuNgayGd <= today ? 'Đang thực hành' : 'Chưa bắt đầu');
+            newTrainee.giaiDoan.push({
+              id: uid('gd'), khoaId: unit.id, khoa: unit.name,
+              nguoiHuongDanId: nguoiHD ? nguoiHD.id : '', nguoiHuongDan: nguoiHD ? nguoiHD.hoTen : nguoiHDTen,
+              tuNgay: tuNgayGd, denNgay: denNgayGd || '',
+              trangThai: trangThaiGd, noiDung:'', ketQua:'Chưa đánh giá', nhanXet:'',
+              minhChungFile:'', minhChungFileType:'', minhChungFileName:'', minhChungLink:'',
+            });
+            if (nguoiHDTen && !nguoiHD) warnings.push('"'+hoTen+'": không tìm thấy nhân viên "'+nguoiHDTen+'" làm người hướng dẫn — đã ghi tên nhưng chưa liên kết được hồ sơ nhân viên, anh vào "Phân khoa" chọn lại giúp em.');
           }
+          // Sắp xếp giai đoạn theo Từ ngày cho đúng thứ tự lộ trình
+          newTrainee.giaiDoan.sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||''));
+          if (newTrainee.giaiDoan.length) recomputeTraineeOverallStatus(newTrainee);
           state.trainees.push(newTrainee);
           try { await saveTrainee(newTrainee); created.push(newTrainee); }
           catch(err){ errors.push('Lỗi khi lưu "'+hoTen+'": '+(err&&err.message||'không rõ lỗi')); }
@@ -9311,7 +9328,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     };
   }
   function renderTraineeListView(content){
-    if (!state._hvFilter) state._hvFilter = { q:'', trangThai:'', pheDuyet:'', loaiHinh:'', hoSo:'', special:'', specialLabel:'' };
+    if (!state._hvFilter) state._hvFilter = { q:'', trangThai:'', pheDuyet:'', loaiHinh:'', dotNhap:'', hoSo:'', special:'', specialLabel:'' };
     if (state._hvToolbarCollapsed === undefined) state._hvToolbarCollapsed = false;
     const fv = state._hvFilter;
     const collapsed = state._hvToolbarCollapsed;
@@ -9344,6 +9361,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             <option value="">— Tất cả loại hình thực hành —</option>
             ${LOAI_HINH_THUC_HANH_LIST().map(s=>`<option value="${s}" ${s===fv.loaiHinh?'selected':''}>${s}</option>`).join('')}
           </select>
+          ${(()=>{ const dotList = Array.from(new Set((state.trainees||[]).map(t=>t.dotNhap).filter(Boolean))).sort().reverse();
+            return dotList.length ? `<select id="hv-filter-dotnhap">
+            <option value="">— Tất cả đợt nhập —</option>
+            ${dotList.map(s=>`<option value="${s}" ${s===fv.dotNhap?'selected':''}>🏷️ ${s}</option>`).join('')}
+          </select>` : ''; })()}
         </div>
         <div class="row-flex" style="margin-bottom:14px">
           ${!isReadOnlyRole(state.adminRole) ? `
@@ -9374,6 +9396,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         if (fTrang && (t.trangThaiTongThe||'Chưa bắt đầu') !== fTrang) return false;
         if (fPhe && (t.trangThaiPheDuyet||'Chờ phê duyệt') !== fPhe) return false;
         if (fLoaiHinh && (t.loaiHinhThucHanh||'') !== fLoaiHinh) return false;
+        if (fv.dotNhap && (t.dotNhap||'') !== fv.dotNhap) return false;
         if (fv.hoSo && (t.trangThaiHoSo||'Chưa đầy đủ') !== fv.hoSo) return false;
         if (fv.special === 'daHoanThanhCombo' && !(t.trangThaiTongThe==='Đã hoàn thành thực hành' || t.trangThaiTongThe==='Đã xác nhận hoàn thành')) return false;
         if (fv.special === 'sapKetThuc' || fv.special === 'quaHan'){
@@ -9489,6 +9512,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     document.getElementById('hv-filter-trangthai').onchange = (e)=>{ fv.trangThai = e.target.value; fv.hoSo=''; fv.special=''; fv.specialLabel=''; renderTraineeListView(content); };
     document.getElementById('hv-filter-pheduyet').onchange = (e)=>{ fv.pheDuyet = e.target.value; fv.hoSo=''; fv.special=''; fv.specialLabel=''; renderTraineeListView(content); };
     document.getElementById('hv-filter-loaihinh').onchange = (e)=>{ fv.loaiHinh = e.target.value; fv.hoSo=''; fv.special=''; fv.specialLabel=''; renderTraineeListView(content); };
+    if (document.getElementById('hv-filter-dotnhap')) document.getElementById('hv-filter-dotnhap').onchange = (e)=>{ fv.dotNhap = e.target.value; renderTraineeListView(content); };
     const clearSpecialBtn = document.getElementById('hv-clear-special');
     if (clearSpecialBtn) clearSpecialBtn.onclick = ()=>{ state._hvFilter = { q:fv.q, trangThai:'', pheDuyet:'', hoSo:'', special:'', specialLabel:'' }; renderTraineeListView(content); };
     if (document.getElementById('hv-add')) document.getElementById('hv-add').onclick = ()=> openTraineeFormModal(null);
