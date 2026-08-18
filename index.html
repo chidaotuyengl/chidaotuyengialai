@@ -4236,8 +4236,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }).sort((a,b)=> a.name.localeCompare(b.name,'vi'));
       return { rowsNow, activeDraftNow, draftStudentsAtNow };
     }
-    function buildTbodyHtml(rowsArg, activeDraftArg){
-      return rowsArg.map((r,idx0)=>{
+    function buildTbodyHtml(rowsArg, activeDraftArg, onlyDraft){
+      const rowsToShow = onlyDraft ? rowsArg.filter(r=> r.added.some(n=>n>0)) : rowsArg;
+      return rowsToShow.map((r,idx0)=>{
         const tongExisting = r.existing.reduce((a,b)=>a+b,0);
         const tongAdded = r.added.reduce((a,b)=>a+b,0);
         const tongAll = tongExisting + tongAdded;
@@ -4246,19 +4247,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <td style="position:sticky;left:0;z-index:1;background:#fff;text-align:center;color:#888">${idx0+1}</td>
           <td style="position:sticky;left:40px;z-index:1;background:#fff;font-weight:bold">${r.name}</td>
           ${r.total.map((n,idx)=>{
-            let bg = '#fff', color = '#999';
-            if (n>=7){ bg='#c0392b'; color='#fff'; }
-            else if (n>=5){ bg='#e67e22'; color='#fff'; }
-            else if (n>=3){ bg='#f1c40f'; color='#5a4a00'; }
-            else if (n>=1){ bg='#a8e6b8'; color='#1e6b34'; }
             const addedN = r.added[idx];
-            const clickable = onEditTrainee && n>0;
+            const displayN = onlyDraft ? addedN : n;
+            let bg = '#fff', color = '#999';
+            if (displayN>=7){ bg='#c0392b'; color='#fff'; }
+            else if (displayN>=5){ bg='#e67e22'; color='#fff'; }
+            else if (displayN>=3){ bg='#f1c40f'; color='#5a4a00'; }
+            else if (displayN>=1){ bg='#a8e6b8'; color='#1e6b34'; }
+            const clickable = onEditTrainee && (onlyDraft ? addedN>0 : n>0);
+            const cellText = onlyDraft
+              ? (addedN>0 ? String(addedN) : '')
+              : (n>0 ? (r.existing[idx]+(addedN>0?' <b>+'+addedN+'</b>':'')+' = '+n) : '');
             return '<td style="text-align:center;background:'+bg+';color:'+color+(clickable?';cursor:pointer;text-decoration:underline dotted':'')+'"'+
               (clickable ? ' data-heat-cell="'+r.khoaId+'::'+idx+'" title="Bấm để xem/sửa học viên đang chiếm chỗ ở đây"' : '') + '>'+
-              (n>0 ? (r.existing[idx]+(addedN>0?' <b>+'+addedN+'</b>':'')+' = '+n) : '') +
+              cellText +
             '</td>';
           }).join('')}
-          <td style="text-align:center;font-weight:bold;background:#eef6ff">${tongExisting}${tongAdded>0?' <b>+'+tongAdded+'</b>':''} = ${tongAll}</td>
+          <td style="text-align:center;font-weight:bold;background:#eef6ff">${onlyDraft ? tongAdded : (tongExisting+(tongAdded>0?' <b>+'+tongAdded+'</b>':'')+' = '+tongAll)}</td>
         </tr>`;}).join('') +
       (()=>{
         // Dòng "Tổng cộng theo tháng" — để kiểm tra nhanh: cộng dồn TẤT CẢ khoa ở mỗi tháng phải
@@ -4273,8 +4278,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <tr style="background:#fff7e0;font-weight:bold;border-top:2px solid #d8a800">
           <td style="position:sticky;left:0;z-index:1;background:#fff7e0"></td>
           <td style="position:sticky;left:40px;z-index:1;background:#fff7e0">📊 Tổng cộng theo tháng</td>
-          ${sumTotal.map((n,idx)=>`<td style="text-align:center">${sumExisting[idx]}${sumAdded[idx]>0?' +'+sumAdded[idx]:''} = ${n}</td>`).join('')}
-          <td style="text-align:center;background:#ffe9a8">${grandExisting}${grandAdded>0?' +'+grandAdded:''} = ${grandExisting+grandAdded}</td>
+          ${(onlyDraft ? sumAdded : sumTotal).map((n,idx)=> onlyDraft ? `<td style="text-align:center">${sumAdded[idx]}</td>` : `<td style="text-align:center">${sumExisting[idx]}${sumAdded[idx]>0?' +'+sumAdded[idx]:''} = ${n}</td>`).join('')}
+          <td style="text-align:center;background:#ffe9a8">${onlyDraft ? grandAdded : (grandExisting+(grandAdded>0?' +'+grandAdded:'')+' = '+(grandExisting+grandAdded))}</td>
         </tr>`;
       })();
     }
@@ -4282,16 +4287,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div class="row-flex" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
         <h3 style="margin:0" id="dh-title">🌡️ Tải trọng dự thảo này theo khoa &amp; tháng (${activeDraft.length} học viên)</h3>
         <div class="row-flex" style="gap:6px">
+          <button type="button" class="secondary" id="dh-only-draft" title="Chỉ hiện đúng những khoa/tháng có học viên trong dự thảo này, ẩn số 'đã có' của toàn viện — bảng gọn hơn để dễ quan sát">🎯 Chỉ xem dự thảo này</button>
           <button type="button" class="secondary" id="dh-zoom" title="Phóng to chữ và ô trong bảng cho dễ đọc">🔍+ Phóng to bảng</button>
           <button type="button" class="secondary" id="dh-export-excel">📊 Xuất Excel</button>
           <button type="button" id="dh-close">Đóng</button>
         </div>
       </div>
-      <p class="muted" style="margin-top:-4px">Mỗi ô hiển thị dạng <b>"đã có + dự thảo này = tổng"</b>. "Đã có" là số học viên đang thực hành thật sự tại khoa đó trong hệ thống (chưa tính dự thảo). "Dự thảo này" là số học viên SẼ được thêm vào nếu bấm "Áp dụng". Màu ô tính theo TỔNG — nếu thấy ô đỏ, nên quay lại chỉnh lộ trình hoặc ngày bắt đầu trước khi áp dụng. ${onEditTrainee ? '<b>Bấm vào 1 ô có số</b> để xem đúng những học viên nào trong dự thảo đang chiếm chỗ ở khoa/tháng đó, và sửa nhanh khoa cho họ.' : ''}</p>
+      <p class="muted" style="margin-top:-4px" id="dh-desc">Mỗi ô hiển thị dạng <b>"đã có + dự thảo này = tổng"</b>. "Đã có" là số học viên đang thực hành thật sự tại khoa đó trong hệ thống (chưa tính dự thảo). "Dự thảo này" là số học viên SẼ được thêm vào nếu bấm "Áp dụng". Màu ô tính theo TỔNG — nếu thấy ô đỏ, nên quay lại chỉnh lộ trình hoặc ngày bắt đầu trước khi áp dụng. ${onEditTrainee ? '<b>Bấm vào 1 ô có số</b> để xem đúng những học viên nào trong dự thảo đang chiếm chỗ ở khoa/tháng đó, và sửa nhanh khoa cho họ.' : ''}</p>
       <div style="overflow:auto;flex:1">
       <table id="dh-table" style="table-layout:fixed;font-size:12px">
         <thead><tr><th style="width:40px;text-align:center;position:sticky;top:0;left:0;z-index:3;background:#1f7a4d">STT</th><th style="width:170px;text-align:left;position:sticky;top:0;left:40px;z-index:3;background:#1f7a4d">Khoa/Phòng</th>${months.map(m=>`<th style="width:78px;text-align:center;position:sticky;top:0;z-index:2;background:#1f7a4d">${m.label}</th>`).join('')}<th style="width:70px;text-align:center;position:sticky;top:0;z-index:2;background:#1f7a4d">Tổng</th></tr></thead>
-        <tbody id="dh-tbody">${buildTbodyHtml(rows, activeDraft)}</tbody>
+        <tbody id="dh-tbody">${buildTbodyHtml(rows, activeDraft, false)}</tbody>
       </table>
       </div>
       <p class="muted" style="margin-top:4px;font-size:12px">💡 Dòng "Tổng cộng theo tháng" nên xấp xỉ đúng ${activeDraft.length} (số học viên trong dự thảo) ở mỗi tháng — nếu 1 tháng nào đó thấp hơn hẳn hoặc cao hơn hẳn số này, có thể có học viên đang bị hở lịch hoặc dồn quá nhiều dòng vào cùng lúc, nên kiểm tra lại lộ trình của những người liên quan.</p>
@@ -4307,6 +4313,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       overlay.querySelector('#dh-zoom').textContent = dhZoomed ? '🔍- Thu nhỏ bảng' : '🔍+ Phóng to bảng';
     };
     let liveRows = rows, liveActiveDraft = activeDraft, liveDraftStudentsAt = draftStudentsAt;
+    let onlyDraftMode = false;
     // Vẽ lại ĐÚNG PHẦN THÂN BẢNG (không đụng khung ngoài modal) sau khi lưu đổi khoa nhanh — an toàn
     // hơn hẳn cách cũ (đóng rồi mở lại cả modal), tránh mọi rủi ro bị thoát nhầm ra ngoài.
     function refreshTable(){
@@ -4315,7 +4322,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       liveActiveDraft = fresh.activeDraftNow;
       liveDraftStudentsAt = fresh.draftStudentsAtNow;
       const tbody = overlay.querySelector('#dh-tbody');
-      if (tbody) tbody.innerHTML = buildTbodyHtml(liveRows, liveActiveDraft);
+      if (tbody) tbody.innerHTML = buildTbodyHtml(liveRows, liveActiveDraft, onlyDraftMode);
       const titleEl = overlay.querySelector('#dh-title');
       if (titleEl) titleEl.textContent = '🌡️ Tải trọng dự thảo này theo khoa & tháng (' + liveActiveDraft.length + ' học viên)';
       bindCellClicks();
@@ -4324,6 +4331,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         tbl.querySelectorAll('th, td').forEach(cell=>{ cell.style.padding = '10px 12px'; });
       }
     }
+    overlay.querySelector('#dh-only-draft').onclick = (e)=>{
+      onlyDraftMode = !onlyDraftMode;
+      e.target.textContent = onlyDraftMode ? '📋 Xem cả toàn viện' : '🎯 Chỉ xem dự thảo này';
+      const descEl = overlay.querySelector('#dh-desc');
+      if (descEl) descEl.innerHTML = onlyDraftMode
+        ? 'Đang chỉ hiện <b>đúng những khoa/tháng có học viên trong dự thảo này</b> (' + liveActiveDraft.length + ' học viên) — số hiển thị là số người trong dự thảo, KHÔNG cộng số đã có sẵn của toàn viện. ' + (onEditTrainee ? '<b>Bấm vào 1 ô có số</b> để xem/sửa nhanh.' : '')
+        : 'Mỗi ô hiển thị dạng <b>"đã có + dự thảo này = tổng"</b>. "Đã có" là số học viên đang thực hành thật sự tại khoa đó trong hệ thống (chưa tính dự thảo). "Dự thảo này" là số học viên SẼ được thêm vào nếu bấm "Áp dụng". Màu ô tính theo TỔNG — nếu thấy ô đỏ, nên quay lại chỉnh lộ trình hoặc ngày bắt đầu trước khi áp dụng. ' + (onEditTrainee ? '<b>Bấm vào 1 ô có số</b> để xem đúng những học viên nào trong dự thảo đang chiếm chỗ ở khoa/tháng đó, và sửa nhanh khoa cho họ.' : '');
+      refreshTable();
+    };
     function bindCellClicks(){
       overlay.querySelectorAll('[data-heat-cell]').forEach(td=>{
         td.onclick = ()=>{
