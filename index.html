@@ -1711,6 +1711,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         if (r.khoaId === state.unitId) pendingItems.push({ t, r });
       });
     });
+    // Sắp xếp theo đúng THỜI GIAN thực hành (từ ngày sớm nhất trước) — trước đây xếp theo thứ tự
+    // học viên/giai đoạn được thêm vào hệ thống, dễ gây khó theo dõi khi khoa cần biết ai đến
+    // trước để ưu tiên sắp xếp người hướng dẫn theo đúng trình tự thời gian thực tế.
+    pendingItems.sort((a,b)=> (a.r.tuNgay||'').localeCompare(b.r.tuNgay||''));
     const cho = pendingItems.filter(x=>x.r.trangThai!=='Đã phân công');
     const xongAll = pendingItems.filter(x=>x.r.trangThai==='Đã phân công');
     // Lọc bảng "Đã phân công" theo khoảng ngày thực hành (tuỳ chọn) — để xem/xuất đúng đợt cần,
@@ -4206,7 +4210,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     all.forEach(t=>{
       if (t.trangThaiTongThe === 'Đã xác nhận hoàn thành') return;
       const stages = t.giaiDoan || [];
-      const lastEnd = stages.length ? stages[stages.length-1].denNgay : t.denNgayDeNghi;
+      const lastEnd = stages.length ? stages.reduce((mx,s)=> (!mx || (s.denNgay||'') > mx) ? s.denNgay : mx, '') : t.denNgayDeNghi;
       if (!lastEnd) return;
       const diffDays = (new Date(lastEnd) - new Date(today)) / 86400000;
       if (diffDays < 0) stats.quaHan++;
@@ -4845,7 +4849,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     (state.trainees||[]).forEach(t=>{
       if (t.trangThaiTongThe === 'Đã xác nhận hoàn thành') return;
       const stages = t.giaiDoan || [];
-      const lastEnd = stages.length ? stages[stages.length-1].denNgay : t.denNgayDeNghi;
+      const lastEnd = stages.length ? stages.reduce((mx,s)=> (!mx || (s.denNgay||'') > mx) ? s.denNgay : mx, '') : t.denNgayDeNghi;
       if (!lastEnd) return;
       const diffDays = (new Date(lastEnd) - new Date(today)) / 86400000;
       if (diffDays < 0) overdue++;
@@ -8378,6 +8382,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       });
     });
     doneList.sort((a,b)=> (b.r.ngayKy||'').localeCompare(a.r.ngayKy||''));
+    // Sắp lại danh sách "chờ phân công" của từng khoa theo đúng THỜI GIAN thực hành (từ ngày sớm
+    // nhất trước) — trước đây theo thứ tự thêm vào, dễ khó theo dõi cho cả CĐT lẫn khoa.
+    Object.values(groups).forEach(g=> g.items.sort((a,b)=> (a.r.tuNgay||'').localeCompare(b.r.tuNgay||'')));
     const khoaIds = Object.keys(groups).sort((a,b)=> (groups[a].khoaTen||'').localeCompare(groups[b].khoaTen||''));
 
     // ====== Khối "Tra cứu theo khoa & khoảng thời gian" ======
@@ -10041,7 +10048,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         if (fv.special === 'sapKetThuc' || fv.special === 'quaHan'){
           if (t.trangThaiTongThe === 'Đã xác nhận hoàn thành') return false;
           const stages = t.giaiDoan || [];
-          const lastEnd = stages.length ? stages[stages.length-1].denNgay : t.denNgayDeNghi;
+          const lastEnd = stages.length ? stages.reduce((mx,s)=> (!mx || (s.denNgay||'') > mx) ? s.denNgay : mx, '') : t.denNgayDeNghi;
           if (!lastEnd) return false;
           const diffDays = (new Date(lastEnd) - new Date(today)) / 86400000;
           if (fv.special === 'quaHan' && !(diffDays < 0)) return false;
@@ -10790,7 +10797,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const stagesFromPlan = !(t.giaiDoan && t.giaiDoan.length);
     const stages = stagesFromPlan
       ? (t.deNghiPhanCongList||[]).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||'')).map(r=>({ khoa:r.khoaTen, tuNgay:r.tuNgay, denNgay:r.denNgay }))
-      : (t.giaiDoan || []);
+      : (t.giaiDoan || []).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||''));
     const tuNgayThucHanh = stages.length ? stages[0].tuNgay : t.tuNgayDeNghi;
     const denNgayThucHanh = stages.length ? stages[stages.length-1].denNgay : t.denNgayDeNghi;
     const overlay = el(`<div class="modal-overlay"><div class="modal" id="qd-modal" style="max-width:680px">
@@ -10978,7 +10985,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const stagesSourceIsPlan = !(t.giaiDoan && t.giaiDoan.length);
     const stages = stagesSourceIsPlan
       ? (t.deNghiPhanCongList||[]).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||'')).map(r=>({ khoa:r.khoaTen, tuNgay:r.tuNgay, denNgay:r.denNgay }))
-      : (t.giaiDoan||[]).slice();
+      : (t.giaiDoan||[]).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||''));
     const tongThang = stages.reduce((s,x)=>s+monthsDecimal(x.tuNgay,x.denNgay),0);
     const nRows = Math.max(stages.length, 1);
     const trinhDoCM = qd.trinhDoChuyenMon || t.chucDanhDangKy || '';
@@ -11003,7 +11010,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   function exportDecisionPL2Doc(t){
     const qd = t.quyetDinh || {};
-    const stages = (t.giaiDoan||[]).slice();
+    const stages = (t.giaiDoan||[]).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||''));
     const tongThang = stages.reduce((s,x)=>s+monthsDecimal(x.tuNgay,x.denNgay),0);
     const rows = stages.map((s,i)=>{
       const emp = state.employees.find(e=>e.id===s.nguoiHuongDanId);
@@ -11096,7 +11103,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     // Cùng nguyên tắc như Phụ lục I: nếu chưa có giai đoạn đã xác nhận, lấy tạm theo kế hoạch
     // Phòng CĐT đã lập (deNghiPhanCongList) để KHÔNG bị trống ngày/tháng trên bản dự thảo.
     const stages = (t.giaiDoan && t.giaiDoan.length)
-      ? (t.giaiDoan||[]).slice()
+      ? (t.giaiDoan||[]).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||''))
       : (t.deNghiPhanCongList||[]).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||'')).map(r=>({ khoa:r.khoaTen, tuNgay:r.tuNgay, denNgay:r.denNgay }));
     const tuNgay = stages.length ? stages[0].tuNgay : t.tuNgayDeNghi;
     const denNgay = stages.length ? stages[stages.length-1].denNgay : t.denNgayDeNghi;
@@ -11446,6 +11453,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     setUrlPath('hocvien/phan-khoa/' + slugName(t.hoTen));
     if (!t.giaiDoan) t.giaiDoan = [];
     const stages = t.giaiDoan;
+    // Sắp xếp lại đúng theo THỨ TỰ THỜI GIAN (từ ngày sớm nhất trước) thay vì theo thứ tự khoa
+    // xác nhận xong trước/sau (dễ gây hiểu nhầm khi các khoa xác nhận không theo đúng trình tự
+    // tháng thực hành). Sort ngay trên chính t.giaiDoan (không phải bản sao) để các nút Sửa/Xoá/…
+    // dùng chỉ số idx vẫn trỏ đúng bản ghi sau khi sắp xếp lại.
+    const stagesOrderBefore = stages.map(s=>s && s.id).join(',');
+    stages.sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||''));
+    if (stages.map(s=>s && s.id).join(',') !== stagesOrderBefore){
+      saveTrainee(t).catch(()=>{});
+    }
     const totalMonthsSaved = stages.reduce((sum,s)=> sum + monthsDecimal(s.tuNgay, s.denNgay), 0);
     const lastStage = stages[stages.length-1];
     function computeNextTuNgay(){
