@@ -2463,6 +2463,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (btnBatchPrint) btnBatchPrint.onclick = ()=>{
       const targets = cho.filter(x => x.r.nguoiHuongDanId);
       if (!targets.length){ alert('Chưa có học viên nào được chọn người hướng dẫn để in.'); return; }
+      if (!confirm('⚠ LƯU Ý QUAN TRỌNG trước khi in:\n\nIn ra giấy để ký thôi CHƯA HOÀN TẤT. Sau khi ký xong, khoa BẮT BUỘC phải quay lại đúng trang này và bấm nút "📎 Đính kèm bản đã ký" thì dữ liệu mới được ghi nhận thật sự — nếu quên bước này, coi như CHƯA xác nhận, dù đã ký giấy xong.\n\nNếu muốn nhanh gọn, chỉ 1 bước, không cần in/scan lại: bấm Huỷ, rồi dùng "✍️ Ký tay trên màn hình" ở trên thay vào.\n\nBấm OK để tiếp tục in giấy.')) return;
       const rowsHtml = targets.map(({t,r},i)=>{
         const emp = state.employees.find(e=>e.id===r.nguoiHuongDanId);
         return '<tr><td style="text-align:center">'+(i+1)+'</td><td>'+(t.hoTen||'')+'</td>' +
