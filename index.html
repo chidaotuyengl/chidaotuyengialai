@@ -904,8 +904,52 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (addedAny) await saveAdminUsers();
   }
   async function saveAdminUsers(){ await window.storage.set('admin_users', JSON.stringify(state.adminUsers), true); }
-  async function saveConfig(){ await window.storage.set('system_config', JSON.stringify(state.config), true); }
-  async function saveEmployees(){ await window.storage.set('employees', JSON.stringify(state.employees), true); }
+  async function saveConfig(){
+    // Áp dụng cùng nguyên tắc an toàn như saveEmployees(): tải lại bản MỚI NHẤT từ máy chủ trước,
+    // rồi chỉ ghép đúng những mục con dạng danh sách (units, rotationTemplates — 2 phần hay bị
+    // nhiều nơi cùng sửa) theo từng id, tránh phiên làm việc cũ ghi đè mất mục người khác vừa thêm.
+    // Các trường khác của config (cấu hình chung, ít đụng độ) vẫn lưu theo đúng bản đang có.
+    try {
+      let latest = null;
+      try {
+        const r = await window.storage.get('system_config', true);
+        latest = (r && r.value) ? JSON.parse(r.value) : null;
+      } catch(e){ latest = null; }
+      if (latest){
+        ['units','rotationTemplates'].forEach(key=>{
+          if (Array.isArray(latest[key]) && Array.isArray(state.config[key])){
+            const merged = {};
+            latest[key].forEach(x=>{ if (x && x.id) merged[x.id] = x; });
+            state.config[key].forEach(x=>{ if (x && x.id) merged[x.id] = x; });
+            state.config[key] = Object.values(merged);
+          }
+        });
+      }
+      const res = await window.storage.set('system_config', JSON.stringify(state.config), true);
+    } catch(err){ console.error('saveConfig lỗi:', err); }
+  }
+  async function saveEmployees(){
+    // AN TOÀN HƠN bản cũ: bản cũ ghi đè NGUYÊN KHỐI toàn bộ mảng employees đang có trong bộ nhớ —
+    // nếu tab đang mở đã cũ (mở trước khi người khác/khoa khác vừa lưu thay đổi ở nơi khác), thao
+    // tác lưu này sẽ VÔ TÌNH XOÁ MẤT những thay đổi đó. Để tránh mất dữ liệu khi nhiều người/nhiều
+    // khoa thao tác lệch thời gian nhau, mỗi lần lưu sẽ: (1) tải lại đúng bản MỚI NHẤT từ máy chủ,
+    // (2) GHÉP theo từng người (id) — ai đang có trong bộ nhớ hiện tại thì dùng bản trong bộ nhớ
+    // (vì đó là thay đổi vừa làm), ai KHÔNG có trong bộ nhớ (do người khác vừa thêm ở nơi khác)
+    // thì GIỮ NGUYÊN bản mới nhất từ máy chủ — không để mất, (3) ghi bản đã ghép này.
+    try {
+      let latest = [];
+      try {
+        const r = await window.storage.get('employees', true);
+        latest = (r && r.value) ? JSON.parse(r.value) : [];
+      } catch(e){ latest = []; }
+      const merged = {};
+      latest.forEach(e=>{ if (e && e.id) merged[e.id] = e; });
+      (state.employees||[]).forEach(e=>{ if (e && e.id) merged[e.id] = e; });
+      const mergedArr = Object.values(merged);
+      const res = await window.storage.set('employees', JSON.stringify(mergedArr), true);
+      if (res) state.employees = mergedArr; // đồng bộ lại bộ nhớ hiện tại theo đúng bản đã ghép
+    } catch(err){ console.error('saveEmployees lỗi:', err); }
+  }
   async function savePending(){ await window.storage.set('pending_activities', JSON.stringify(state.pending), true); }
   async function saveApprovedLog(){ await window.storage.set('approved_log', JSON.stringify(state.approvedLog), true); }
   async function saveRejectedLog(){ await window.storage.set('rejected_log', JSON.stringify(state.rejectedLog), true); }
@@ -977,7 +1021,30 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   async function saveTrainee(t){
     if (!t || !t.id) return;
     try {
+      // AN TOÀN VỚI THAO TÁC ĐỒNG THỜI — đây chính là nguyên nhân gây mất dữ liệu khi nhiều
+      // khoa/Phòng CĐT thao tác lệch thời gian nhau: trước khi ghi, tải lại đúng bản MỚI NHẤT
+      // của CHÍNH học viên này từ máy chủ, rồi ghép lại 2 danh sách dễ bị nhiều nơi cùng sửa nhất
+      // (giaiDoan — giai đoạn đã xác nhận, deNghiPhanCongList — đề nghị phân công Phòng CĐT đã
+      // lập) theo khoá tự nhiên (khoaId+tuNgay): nếu có mục nào CHỈ tồn tại trên máy chủ (do 1
+      // khoa khác vừa xác nhận/1 phiên khác vừa thêm trong lúc phiên này đang mở, chưa kịp tải
+      // lại) mà KHÔNG có trong bản đang lưu ở đây, sẽ tự bổ sung lại — tránh bị ghi đè mất việc
+      // người khác vừa làm.
+      let serverT = null;
+      try {
+        const r = await window.storage.get('trainees:'+t.id, true);
+        serverT = (r && r.value) ? JSON.parse(r.value) : null;
+      } catch(e){ serverT = null; }
       const clone = JSON.parse(JSON.stringify(t));
+      if (serverT){
+        ['giaiDoan','deNghiPhanCongList'].forEach(key=>{
+          if (Array.isArray(serverT[key]) && Array.isArray(clone[key])){
+            const naturalKey = (x)=> (x&&x.khoaId||'')+'::'+(x&&x.tuNgay||'');
+            const seen = new Set(clone[key].map(naturalKey));
+            const onlyOnServer = serverT[key].filter(x=> x && !seen.has(naturalKey(x)));
+            if (onlyOnServer.length) clone[key] = clone[key].concat(onlyOnServer);
+          }
+        });
+      }
       await offloadLargeBlobs(clone, t.id);
       const res = await window.storage.set('trainees:'+t.id, JSON.stringify(clone), true);
       if (!res){
@@ -1764,7 +1831,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
                 return `<option value="${e.id}" ${r.nguoiHuongDanId===e.id?'selected':''} ${full?'disabled':''}>${e.hoTen} (${cnt}/${maxHD()})${full?' — Đủ':''}</option>`;
               }).join('')}
             </select></td>
-            <td style="text-align:center"><button data-req-confirm="${r.id}" class="small-btn" style="${(!daChonHD||!daKy)?'opacity:.5':''}">✅ Xác nhận</button></td>
+            <td style="text-align:center"><button data-req-confirm="${r.id}" class="small-btn" style="${!daChonHD?'opacity:.5':''}">✅ Xác nhận</button></td>
           </tr>`;
         }).join('')}
         </tbody>
@@ -1811,6 +1878,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div class="card" style="margin-top:16px;background:#f3f8f4;border-color:#bcdcc4">
         <h4 style="margin:0 0 4px;color:#1e7a34;font-size:15px">🖨️ Phương án 2 — Ký giấy xác nhận phân công</h4>
         <p class="muted" style="margin-top:-2px">In bảng phân công ra giấy để Trưởng khoa ký tay, sau đó có thể nộp bản giấy trực tiếp cho Phòng Chỉ đạo tuyến, hoặc chụp/scan lại rồi đính kèm vào hệ thống để lưu minh chứng điện tử.</p>
+        <p style="margin-top:4px;background:#fdecea;border:1px solid #f0b8b0;border-radius:6px;padding:6px 10px;color:#b3261e;font-weight:600">⚠ Lưu ý quan trọng: in ra giấy để ký thôi CHƯA HOÀN TẤT — hệ thống chỉ thực sự ghi nhận (đưa vào Phụ lục) SAU KHI khoa quay lại đúng trang này và bấm nút "📎 Đính kèm bản đã ký" bên dưới. Nếu quên bước này, dữ liệu vẫn đứng ở "Chờ khoa phân công" dù đã ký giấy xong. Nếu không chắc sẽ quay lại kịp, nên dùng "✍️ Ký tay trên màn hình" ở trên — chỉ 1 bước, xong ngay.</p>
         <div class="row-flex" style="margin-top:8px">
           <button type="button" class="secondary" id="dnpc-batch-print">🖨️ In bảng phân công để ký giấy (${cho.filter(x=>x.r.nguoiHuongDanId).length} học viên đã chọn người hướng dẫn)</button>
           <button type="button" class="secondary" id="dnpc-batch-attach">📎 Đính kèm bản đã ký (scan/chụp) — áp dụng cho tất cả dòng trên</button>
@@ -1890,8 +1958,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               </div>
             </div>
 
-            <button data-req-confirm="${r.id}" style="margin-top:16px;font-size:15px${(!daChonHD||!daNhapKy||!daKyHoacScan)?';opacity:0.55':''}">✅ Bước 4 — Xác nhận phân công (hoàn tất)</button>
-            ${(!daChonHD||!daNhapKy||!daKyHoacScan) ? '<p class="muted" style="margin-top:6px">👉 Hoàn thành đủ 3 bước trên rồi bấm nút này để gửi kết quả về Phòng Chỉ đạo tuyến.</p>' : ''}
+            <button data-req-confirm="${r.id}" style="margin-top:16px;font-size:15px${(!daChonHD||!daNhapKy)?';opacity:0.55':''}">✅ Bước 4 — Xác nhận phân công (hoàn tất)</button>
+            ${(!daChonHD||!daNhapKy) ? '<p class="muted" style="margin-top:6px">👉 Hoàn thành đủ các bước trên rồi bấm nút này để gửi kết quả về Phòng Chỉ đạo tuyến. (Chữ ký không bắt buộc — có thể bổ sung sau.)</p>' : ''}
           </div>
         `;}).join('')}
         `}
@@ -2255,7 +2323,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         if (!r.chuKyImage && !r.fileDataUrl && state.lastSignatureDataUrl){
           r.chuKyImage = state.lastSignatureDataUrl;
         }
-        if (!r.chuKyImage && !r.fileDataUrl){ alert('Vui lòng ký trên màn hình (khung "Ký xác nhận bằng phân công" ở Dashboard, hoặc nút Ký trong thẻ học viên) HOẶC in phiếu ký giấy rồi đính kèm bản scan, trước khi xác nhận.'); return; }
+        if (!r.chuKyImage && !r.fileDataUrl){
+          if (!confirm('Chưa có chữ ký (chưa ký trên màn hình, cũng chưa đính kèm bản scan giấy đã ký).\n\nVẫn xác nhận phân công mà KHÔNG cần chữ ký? (Có thể bổ sung chữ ký sau nếu cần.)')) return;
+        }
         const emp = state.employees.find(e=>e.id===hdId);
         const cnt = countMenteesAtRange(hdId, r.tuNgay, r.denNgay);
         if (cnt >= maxHD()){ alert('Người hướng dẫn này đã đủ '+maxHD()+' học viên trong khoảng thời gian này. Vui lòng chọn người khác.'); return; }
