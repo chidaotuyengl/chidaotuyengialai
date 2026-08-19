@@ -8385,11 +8385,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div class="card" style="background:#fffdf7;border:1px dashed #a8722a">
         <h3>📨 Link TỔNG — dùng khi gửi công văn cho nhiều khoa cùng lúc</h3>
         <p class="muted" style="margin-top:-6px">Thay vì liệt kê hàng chục link riêng (mỗi khoa 1 link) trong công văn — rất rườm rà — anh chỉ cần đưa <b>đúng 1 link duy nhất</b> này vào công văn gửi chung cho toàn viện. Mỗi khoa mở link, tự chọn đúng tên khoa mình trong danh sách, hệ thống sẽ tự điều hướng vào đúng trang phân công của khoa đó (giống hệt như link riêng, chỉ khác là dùng chung 1 link để gửi).</p>
-        <div class="row-flex">
+        <div class="row-flex" style="flex-wrap:wrap">
           <button type="button" id="copy-link-tong">📨 Copy Link TỔNG (gửi công văn)</button>
-          <button type="button" class="secondary" id="export-word-khoa-list">📝 Xuất Word danh sách khoa (kèm công văn)</button>
+          <button type="button" class="secondary" id="export-cv-phan-bo">📄 Xuất Công văn phân bổ (kèm QR, đúng mẫu)</button>
+          <button type="button" class="secondary" id="export-word-khoa-list">📝 Phụ lục I — Danh sách khoa</button>
+          <button type="button" class="secondary" id="export-word-hocvien-list">📋 Phụ lục — Danh sách học viên</button>
         </div>
-        <p class="muted" style="margin-top:6px;font-size:12px">"Xuất Word danh sách khoa" tạo sẵn bảng đơn giản — chỉ Tên khoa + Từ ngày/Đến ngày — để anh copy dán thẳng vào Phụ lục kèm công văn, không cần gõ tay lại.</p>
+        <p class="muted" style="margin-top:6px;font-size:12px">"Xuất Công văn phân bổ" tạo sẵn bản dự thảo công văn đúng thể thức và văn phong như công văn đã ban hành gần nhất (có đủ căn cứ pháp lý, mục tiêu, link + mã QR, hạn chót) — anh chỉ cần điền số công văn, hạn chót rồi trình ký, không phải soạn tay lại từ đầu.</p>
+        <p class="muted" style="margin-top:2px;font-size:12px">2 nút Phụ lục tạo sẵn bảng đơn giản (danh sách khoa / danh sách học viên) để copy dán kèm công văn, không cần gõ tay lại.</p>
         <p class="muted" style="margin-top:6px;font-size:12px">⚠️ Lưu ý: link này để lộ danh sách tên tất cả các khoa/phòng (không lộ dữ liệu học viên) cho bất kỳ ai mở được link — chỉ nên đưa vào công văn nội bộ gửi đúng các khoa liên quan, không đăng công khai.</p>
       </div>
       <div class="card">
@@ -8492,11 +8495,100 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const denNgays = g.items.map(x=>x.r.denNgay).filter(Boolean).sort();
         return { khoaTen: g.khoaTen||'(Chưa rõ tên khoa)', tuNgay: tuNgays[0]||'', denNgay: denNgays[denNgays.length-1]||'' };
       }).sort((a,b)=> a.khoaTen.localeCompare(b.khoaTen,'vi'));
-      const bodyHtml = '<p>Danh sách các khoa/phòng có học viên thực hành đang chờ/được phân công (Phụ lục kèm công văn):</p>' +
-        '<table><thead><tr><th style="width:8%">STT</th><th>Tên khoa/phòng</th><th style="width:20%">Từ ngày</th><th style="width:20%">Đến ngày</th></tr></thead><tbody>' +
+      const bodyHtml = '<p style="text-align:center;font-weight:bold;font-size:14pt;margin-bottom:0">Phụ lục I</p>' +
+        '<p style="text-align:center;font-weight:bold;font-size:13pt;margin-top:0">DANH SÁCH CÁC KHOA HƯỚNG DẪN HỌC VIÊN THỰC HÀNH</p>' +
+        '<table class="data"><thead><tr><th style="width:8%">STT</th><th>Tên khoa/phòng</th><th style="width:20%">Từ ngày</th><th style="width:20%">Đến ngày</th></tr></thead><tbody>' +
         rows.map((r,i)=> '<tr><td style="text-align:center">'+(i+1)+'</td><td>'+r.khoaTen+'</td><td style="text-align:center">'+fmtDate(r.tuNgay)+'</td><td style="text-align:center">'+fmtDate(r.denNgay)+'</td></tr>').join('') +
         '</tbody></table>';
-      previewWordDoc('Phụ lục — Danh sách khoa có học viên thực hành', bodyHtml, 'phu_luc_danh_sach_khoa_hoc_vien_' + todayISO() + '.doc', { landscape:false, margins:{ top:2, right:1.3, bottom:2, left:2.5 } }, '⬇️ Tải file Word');
+      previewWordDoc('Phụ lục — Danh sách khoa có học viên thực hành', bodyHtml, 'phu_luc_danh_sach_khoa_hoc_vien_' + todayISO() + '.doc', { landscape:false, margins:{ top:2, right:1.3, bottom:2, left:2.5 }, colWidths:[8,52,20,20] }, '⬇️ Tải file Word');
+    };
+    // ====== Phụ lục — Danh sách học viên (đúng mẫu: STT / Họ tên / Năm sinh / Trình độ chuyên môn) ======
+    function hocVienListRows(){
+      const seen = new Set(); const list = [];
+      allByKhoa.forEach(({t})=>{ if (!seen.has(t.id)){ seen.add(t.id); list.push(t); } });
+      return list.sort((a,b)=> (a.hoTen||'').localeCompare(b.hoTen||'','vi'));
+    }
+    const btnExportWordHocVienList = content.querySelector('#export-word-hocvien-list');
+    if (btnExportWordHocVienList) btnExportWordHocVienList.onclick = ()=>{
+      const list = hocVienListRows();
+      if (!list.length){ alert('Hiện không có học viên nào để xuất.'); return; }
+      const bodyHtml = '<p style="text-align:center;font-weight:bold;font-size:14pt;margin-bottom:0">Phụ lục</p>' +
+        '<p style="text-align:center;font-weight:bold;font-size:13pt;margin-top:0">DANH SÁCH HỌC VIÊN HỌC THỰC HÀNH LÂM SÀNG<br>TẠI BỆNH VIỆN</p>' +
+        '<p style="text-align:left;font-style:italic;font-weight:bold;margin-top:10px">Tổng số ' + list.length + ' học viên</p>' +
+        '<table class="data"><thead><tr><th style="width:8%">Stt</th><th>Họ tên học viên</th><th style="width:18%">Năm sinh</th><th style="width:28%">Trình độ chuyên môn</th></tr></thead><tbody>' +
+        list.map((t,i)=> '<tr><td style="text-align:center">'+(i+1)+'</td><td>'+(t.hoTen||'')+'</td><td style="text-align:center">'+(t.ngaySinh?fmtDate(t.ngaySinh):'')+'</td><td>'+(t.chucDanhDangKy||'')+'</td></tr>').join('') +
+        '</tbody></table>';
+      previewWordDoc('Phụ lục - Danh sách học viên học thực hành lâm sàng', bodyHtml, 'phu_luc_danh_sach_hoc_vien_' + todayISO() + '.doc', { landscape:false, margins:{ top:2, right:1.3, bottom:2, left:2.5 }, colWidths:[8,40,22,30] }, '⬇️ Tải file Word');
+    };
+    // ====== Công văn phân bổ học viên (đúng thể thức + văn phong công văn mẫu đã ban hành) ======
+    const btnExportCvPhanBo = content.querySelector('#export-cv-phan-bo');
+    if (btnExportCvPhanBo) btnExportCvPhanBo.onclick = ()=>{
+      const cvSoModal = el(`<div class="modal-overlay"><div class="modal" style="max-width:480px">
+        <h3>📄 Xuất Công văn phân bổ học viên</h3>
+        <div class="field"><label>Số công văn (để trống nếu chưa có, điền tay sau)</label><input id="cv-so" placeholder="VD: 3221" /></div>
+        <div class="field"><label>Hạn chót các khoa hoàn tất phân công</label><input id="cv-han" type="date" /></div>
+        <div class="row-flex" style="justify-content:flex-end;margin-top:10px">
+          <button class="secondary" id="cv-cancel">Đóng</button>
+          <button id="cv-ok">📄 Tạo bản dự thảo Word</button>
+        </div>
+      </div></div>`);
+      root.appendChild(cvSoModal);
+      cvSoModal.querySelector('#cv-cancel').onclick = ()=> cvSoModal.remove();
+      cvSoModal.querySelector('#cv-ok').onclick = ()=>{
+        const soCV = cvSoModal.querySelector('#cv-so').value.trim();
+        const hanChot = cvSoModal.querySelector('#cv-han').value;
+        cvSoModal.remove();
+        const url = window.location.origin + window.location.pathname + '?role=chonkhoa';
+        const qrImgUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(url);
+        const tenGD = state.config.tenGiamDoc || '……………………';
+        const soKhoa = khoaIds.length + Object.keys((function(){ const seen={}; doneList.forEach(d=>{ seen[d.r.khoaId]=1; }); return seen; })()).length;
+        const soHV = hocVienListRows().length;
+        const bodyHtml =
+          '<table class="kv"><tr>' +
+            '<td style="width:50%"><div class="hd-org" style="text-align:left"><b>SỞ Y TẾ TỈNH GIA LAI</b><br><b>BỆNH VIỆN ĐA KHOA</b><br><b class="hd-underline">TRUNG TÂM</b></div></td>' +
+            '<td style="width:50%"><div style="text-align:center;font-weight:bold;font-size:12.5pt;white-space:nowrap" nowrap="nowrap">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT&nbsp;NAM</div><div style="text-align:center;font-weight:normal;text-decoration:underline">Độc lập&nbsp;-&nbsp;Tự do&nbsp;-&nbsp;Hạnh phúc</div></td>' +
+          '</tr></table>' +
+          '<table class="kv" style="margin-top:10px"><tr>' +
+            '<td style="width:50%;vertical-align:top">Số: <b>' + (soCV||'……') + '&nbsp;/BVĐKTT-CĐT</b><div style="text-align:left;margin-top:2px">V/v phân bổ học viên học thực hành và các khoa phân công người hướng dẫn thực hành tại Bệnh viện</div></td>' +
+            '<td style="width:50%;vertical-align:top"><div class="hd-place">Gia Lai, ' + vietnameseDateLong(todayISO()) + '</div></td>' +
+          '</tr></table>' +
+          '<p style="text-align:center;margin-top:20px">Kính gửi: Các khoa, phòng trực thuộc Bệnh viện</p>' +
+          '<p style="font-style:italic">Căn cứ Luật Khám bệnh, Chữa bệnh số 15/2023/QH15 ngày 09 tháng 01 năm 2023 của Quốc hội nước Cộng Hòa Xã Hội Chủ Nghĩa Việt Nam;</p>' +
+          '<p style="font-style:italic">Căn cứ Nghị định số 96/2023/NĐ-CP ngày 30 tháng 12 năm 2023 của Chính phủ Quy định chi tiết một số điều của Luật Khám bệnh, chữa bệnh;</p>' +
+          '<p style="font-style:italic">Căn cứ Thông tư 32/2023/TT-BYT ngày 31/12/2023 của Bộ Y tế về việc Quy định chi tiết một số điều của Luật Khám bệnh, Chữa bệnh;</p>' +
+          '<p style="font-style:italic">Căn cứ Bản công bố cơ sở khám bệnh, chữa bệnh đáp ứng yêu cầu là cơ sở thực hành và cơ sở hướng dẫn thực hành của Bệnh viện Đa khoa Trung tâm tỉnh Gia Lai;</p>' +
+          '<p style="font-style:italic">Căn cứ Kế hoạch tổ chức đào tạo thực hành cho các chức danh chuyên môn tại Bệnh viện đã được ban hành;</p>' +
+          '<p>Bệnh viện phân bổ học viên học thực hành và các khoa có nhiệm vụ phân công Bác sĩ/Dược sĩ hướng dẫn thực hành cho các học viên như sau:</p>' +
+          '<p><b>1. Mục tiêu</b></p>' +
+          '<p>- Bệnh viện thông báo danh sách học viên được phân bổ về các khoa để tham gia học thực hành.</p>' +
+          '<p>- Yêu cầu các khoa tiếp nhận và phân công người hướng dẫn thực hành phù hợp.</p>' +
+          '<p>- Bảo đảm việc thực hành của học viên được tổ chức đúng quy định.</p>' +
+          '<p><b>2. Danh sách các khoa hướng dẫn học viên thực hành:</b> Phụ lục I đính kèm (' + soKhoa + ' khoa/phòng).</p>' +
+          '<p><b>3. Danh sách các học viên học thực hành được phân bổ tại các khoa:</b> Phụ lục II đính kèm (' + soHV + ' học viên).</p>' +
+          '<p><b>4. Phân công người hướng dẫn</b></p>' +
+          '<p style="font-style:italic">4.1. Yêu cầu đối với người hướng dẫn thực hành</p>' +
+          '<p>Người hướng dẫn thực hành (Bác sĩ/Dược sĩ) phải đáp ứng các điều kiện:</p>' +
+          '<p>a) Có chứng chỉ hành nghề;</p>' +
+          '<p>b) Có phạm vi hoạt động chuyên môn phù hợp với văn bằng của người thực hành;</p>' +
+          '<p>c) Có trình độ đào tạo tương đương hoặc cao hơn người thực hành và có thời gian hành nghề liên tục từ 3 năm trở lên.</p>' +
+          '<p>d) Có chứng chỉ "Phương pháp dạy - học lâm sàng" cho người giảng dạy thực hành trong đào tạo khối ngành sức khỏe.</p>' +
+          '<p>e) Một người hướng dẫn thực hành chỉ được hướng dẫn tối đa là 05 người thực hành trong cùng một thời điểm.</p>' +
+          '<p style="font-style:italic">4.2. Trách nhiệm của người hướng dẫn thực hành:</p>' +
+          '<p>a) Hướng dẫn thực hành thuộc phạm vi hoạt động chuyên môn cho người học thực hành;</p>' +
+          '<p>b) Nhận xét về kết quả thực hành và chịu trách nhiệm về nội dung nhận xét của mình, phổ biến nội dung nhận xét cho người học thực hành biết để họ nỗ lực học tập;</p>' +
+          '<p>c) Chịu trách nhiệm trong trường hợp người thực hành gây sai sót chuyên môn trong quá trình thực hành, gây ảnh hưởng đến sức khỏe của người bệnh do lỗi của người hướng dẫn thực hành.</p>' +
+          '<p><b>5. Hình thức phân công và thời gian thực hiện</b></p>' +
+          '<p>- Các khoa có trách nhiệm phân công danh sách người hướng dẫn học viên thực hành theo đường link sau:</p>' +
+          '<p style="font-style:italic">(Vào đường link hoặc quét mã QR / Chọn khoa / Vào trang phân công / Chọn tên người ký chung (Lãnh đạo khoa) / Người hướng dẫn / Ký xác nhận bảng phân công/Áp dụng chữ ký trên cho tất cả học viên)</p>' +
+          '<table class="kv" style="border:1px solid #999"><tr><td style="width:75%;vertical-align:middle;padding:8px"><a href="' + url + '">' + url + '</a></td><td style="width:25%;text-align:center;padding:8px"><img src="' + qrImgUrl + '" style="width:110px;height:110px" /></td></tr></table>' +
+          '<p style="margin-top:8px">- Thời gian phân công danh sách người hướng dẫn học viên thực hành tại các khoa, theo đường link chậm nhất đến <b>' + (hanChot ? ('17h00 ngày '+fmtDate(hanChot)) : '……') + '</b>.</p>' +
+          '<p>Nhận được công văn này đề nghị các khoa thực hiện theo đúng quy định./.</p>' +
+          '<table class="kv" style="margin-top:16px"><tr>' +
+            '<td style="width:50%;vertical-align:top"><i><b>Nơi nhận:</b><br>- Như trên;<br>- Lãnh đạo Bệnh viện;<br>- Phòng KHTH, TCKT;<br>- Lưu: VT, TCCB, CĐT.</i></td>' +
+            '<td style="width:50%;text-align:center;font-weight:bold">GIÁM ĐỐC<br><span class="sign-note">(Ký, ghi rõ họ tên, đóng dấu)</span><br><br><br><br>' + tenGD + '</td>' +
+          '</tr></table>';
+        previewWordDoc('CÔNG VĂN phân bổ học viên học thực hành', bodyHtml, 'CV_phan_bo_hoc_vien_' + todayISO() + '.doc', { landscape:false }, '⬇️ Tải file Word');
+      };
     };
     content.querySelector('#tc-loc').onclick = ()=>{
       state.traCuuKhoa = {
@@ -10625,7 +10717,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (!t.quyetDinh) t.quyetDinh = { soQD:'', ngayKy:'', trinhDoChuyenMon:'', nguoiKyGiamDoc: (state.config.tenGiamDoc||''), fileDataUrl:'', fileType:'', fileName:'', fileLink:'' };
     if (!t.quyetDinh.nguoiKyGiamDoc && state.config.tenGiamDoc) t.quyetDinh.nguoiKyGiamDoc = state.config.tenGiamDoc;
     const qd = t.quyetDinh;
-    const stages = t.giaiDoan || [];
+    const stagesFromPlan = !(t.giaiDoan && t.giaiDoan.length);
+    const stages = stagesFromPlan
+      ? (t.deNghiPhanCongList||[]).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||'')).map(r=>({ khoa:r.khoaTen, tuNgay:r.tuNgay, denNgay:r.denNgay }))
+      : (t.giaiDoan || []);
     const tuNgayThucHanh = stages.length ? stages[0].tuNgay : t.tuNgayDeNghi;
     const denNgayThucHanh = stages.length ? stages[stages.length-1].denNgay : t.denNgayDeNghi;
     const overlay = el(`<div class="modal-overlay"><div class="modal" id="qd-modal" style="max-width:680px">
@@ -10638,8 +10733,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div class="card" style="background:#f8f7f1">
         <h3 style="font-size:14px">Thông tin tự động lấy từ hồ sơ học viên</h3>
         <p style="margin:4px 0"><b>NV thực hành:</b> ${t.hoTen} &nbsp;&nbsp; <b>Ngày sinh:</b> ${t.ngaySinh?fmtDate(t.ngaySinh):'—'}</p>
-        <p style="margin:4px 0"><b>Thời gian thực hành (theo phân khoa đã lưu):</b> ${tuNgayThucHanh?fmtDate(tuNgayThucHanh):'—'} – ${denNgayThucHanh?fmtDate(denNgayThucHanh):'—'} &nbsp;&nbsp; <b>Tổng:</b> ${stages.reduce((s,x)=>s+monthsDecimal(x.tuNgay,x.denNgay),0).toFixed(1)} tháng</p>
+        <p style="margin:4px 0"><b>Thời gian thực hành (theo ${stagesFromPlan?'kế hoạch đã lập, chờ khoa xác nhận':'phân khoa đã lưu'}):</b> ${tuNgayThucHanh?fmtDate(tuNgayThucHanh):'—'} – ${denNgayThucHanh?fmtDate(denNgayThucHanh):'—'} &nbsp;&nbsp; <b>Tổng:</b> ${stages.reduce((s,x)=>s+monthsDecimal(x.tuNgay,x.denNgay),0).toFixed(1)} tháng</p>
         <p class="muted" style="margin-top:6px">Nếu khoảng thời gian này chưa đúng, anh vào "🏥 Phân khoa" để bổ sung/sửa giai đoạn trước khi xuất văn bản.</p>
+        ${stagesFromPlan && stages.length ? '<p style="margin-top:6px;color:#b3261e">⚠ Đây là số liệu theo KẾ HOẠCH Phòng CĐT đã lập — một số khoa có thể chưa xác nhận xong người hướng dẫn. Nên rà soát lại ở mục Phụ lục II trước khi trình ký chính thức.</p>' : ''}
         ${(function(){ const ds = traineeDocsSummary(t); return ds.missing > 0
           ? '<p style="margin-top:6px;color:var(--red)">⚠ Hồ sơ đính kèm còn thiếu '+ds.missing+' mục bắt buộc: '+ds.missingNames.join(', ')+' — nên bổ sung trước khi trình Giám đốc ký Quyết định.</p>'
           : '<p style="margin-top:6px;color:#1f7a4d">✅ Hồ sơ đính kèm đã đầy đủ các mục bắt buộc.</p>'; })()}
@@ -10802,7 +10898,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   function exportDecisionPL1Doc(t){
     const qd = t.quyetDinh || {};
-    const stages = (t.giaiDoan||[]).slice();
+    // Phụ lục I chỉ liệt kê "đi khoa nào — từ ngày đến ngày" — đây là điều PHÒNG CHỈ ĐẠO TUYẾN
+    // tự quyết định ngay từ lúc lập kế hoạch, không phụ thuộc việc khoa đã chọn xong người
+    // hướng dẫn hay chưa (đó là việc riêng của Phụ lục II). Vì vậy nếu học viên đã có kế hoạch
+    // do Phòng CĐT lập (deNghiPhanCongList) nhưng khoa CHƯA xác nhận xong hết (giaiDoan còn
+    // trống hoặc thiếu), vẫn ưu tiên lấy đúng theo kế hoạch đã lập để Phụ lục I có dữ liệu ngay,
+    // không phải chờ khoa. Nếu đã có giai đoạn chính thức (đã xác nhận) thì vẫn ưu tiên dùng nó
+    // vì đó là dữ liệu mới nhất/chắc chắn nhất.
+    const stagesSourceIsPlan = !(t.giaiDoan && t.giaiDoan.length);
+    const stages = stagesSourceIsPlan
+      ? (t.deNghiPhanCongList||[]).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||'')).map(r=>({ khoa:r.khoaTen, tuNgay:r.tuNgay, denNgay:r.denNgay }))
+      : (t.giaiDoan||[]).slice();
     const tongThang = stages.reduce((s,x)=>s+monthsDecimal(x.tuNgay,x.denNgay),0);
     const nRows = Math.max(stages.length, 1);
     const trinhDoCM = qd.trinhDoChuyenMon || t.chucDanhDangKy || '';
@@ -10820,7 +10926,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       '<tr><th rowspan="2" style="width:5%">STT</th><th rowspan="2" style="width:18%">Họ và tên</th><th rowspan="2" style="width:11%">Sinh ngày</th><th rowspan="2" style="width:15%">Trình độ chuyên môn</th><th rowspan="2" style="width:21%">Các khoa thực hành</th><th colspan="3">Thời gian thực hành</th></tr>' +
       '<tr><th style="width:10%">Từ ngày</th><th style="width:10%">Đến ngày</th><th style="width:10%">Số tháng</th></tr></thead><tbody>' +
       rows + '<tr><td colspan="7" style="text-align:right;font-weight:bold">Cộng:</td><td style="text-align:center;font-weight:bold">' + tongThang.toFixed(1) + '</td></tr>' +
-      '</tbody></table>';
+      '</tbody></table>' +
+      (stagesSourceIsPlan && stages.length ? '<p style="font-style:italic;color:#b3261e;margin-top:8px">* Số liệu lấy theo kế hoạch luân khoa do Phòng Chỉ đạo tuyến lập — 1 số khoa có thể CHƯA xác nhận xong người hướng dẫn (xem chi tiết ở Phụ lục II). Cần rà soát lại trước khi trình ký chính thức nếu có thay đổi phát sinh.</p>' : '');
     exportWordCustomDoc('PHỤ LỤC I - DANH SÁCH CÁC KHOA LÂM SÀNG THỰC HÀNH', decisionDocHeaderHtml(qd, t, 'PHỤ LỤC I<br>DANH SÁCH CÁC KHOA LÂM SÀNG THỰC HÀNH', { showNV:false }) + tableHtml, 'PL_I_danh_sach_khoa_lam_sang_'+(t.hoTen||'').replace(/\s+/g,'_')+'.doc', { landscape:true });
   }
 
@@ -10916,7 +11023,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
   function exportDecisionMainDoc(t){
     const qd = t.quyetDinh || {};
-    const stages = (t.giaiDoan||[]).slice();
+    // Cùng nguyên tắc như Phụ lục I: nếu chưa có giai đoạn đã xác nhận, lấy tạm theo kế hoạch
+    // Phòng CĐT đã lập (deNghiPhanCongList) để KHÔNG bị trống ngày/tháng trên bản dự thảo.
+    const stages = (t.giaiDoan && t.giaiDoan.length)
+      ? (t.giaiDoan||[]).slice()
+      : (t.deNghiPhanCongList||[]).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||'')).map(r=>({ khoa:r.khoaTen, tuNgay:r.tuNgay, denNgay:r.denNgay }));
     const tuNgay = stages.length ? stages[0].tuNgay : t.tuNgayDeNghi;
     const denNgay = stages.length ? stages[stages.length-1].denNgay : t.denNgayDeNghi;
     const tongThang = stages.reduce((s,x)=>s+monthsDecimal(x.tuNgay,x.denNgay),0);
