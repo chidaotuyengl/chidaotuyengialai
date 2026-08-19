@@ -2273,11 +2273,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const reqId = btn.getAttribute('data-req-sign');
         const found = pendingItems.find(x=>x.r.id===reqId);
         if (!found) return;
+        let nguoiKyRow = (found.r.nguoiKy||'').trim();
+        if (!nguoiKyRow) nguoiKyRow = (content.querySelector('#dnpc-ten-ky-chung')||{}).value?.trim() || '';
+        if (!nguoiKyRow){ alert('Vui lòng nhập tên người ký trước — ở ô "Tên người ký chung" phía trên bảng, hoặc ô tên riêng của học viên này — trước khi ký.'); return; }
+        found.r.nguoiKy = nguoiKyRow;
         openSignaturePadModal('Ký xác nhận phân công — ' + found.t.hoTen, async (dataUrl)=>{
           found.r.chuKyImage = dataUrl;
           state.lastSignatureDataUrl = dataUrl; // nhớ lại để có thể "Dùng lại" nhanh cho học viên khác / phiếu khác
           await saveTrainee(found.t);
-          showToast('Đã lưu chữ ký.');
+          showToast('✅ Đã lưu chữ ký cho "' + nguoiKyRow + '".');
           renderUnitPhanCong(content);
         });
       };
@@ -2562,12 +2566,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const btnSaveDnpc = content.querySelector('#dnpc-sig-save');
       if (btnSaveDnpc) btnSaveDnpc.onclick = ()=>{
         if (!hasDrawnDnpc){ alert('Vui lòng ký vào khung trước khi lưu.'); return; }
+        const tenChungInput2 = content.querySelector('#dnpc-ten-ky-chung');
+        const tenChung2 = tenChungInput2 ? tenChungInput2.value.trim() : '';
+        if (!tenChung2){ alert('Vui lòng nhập "Tên người ký chung" ở ô phía trên (VD: BSCKI. Nguyễn Văn A) trước khi lưu chữ ký — để hệ thống biết đúng ai đang ký.'); if (tenChungInput2) tenChungInput2.focus(); return; }
+        state.dnpcTenKyChung = tenChung2;
         const outCanvas = document.createElement('canvas');
         outCanvas.width = 140; outCanvas.height = Math.round(140 * dnpcCanvas.height / dnpcCanvas.width);
         outCanvas.getContext('2d').drawImage(dnpcCanvas, 0, 0, outCanvas.width, outCanvas.height);
         state.lastSignatureDataUrl = outCanvas.toDataURL('image/png');
         state.dnpcDangKyLai = false;
         renderUnitPhanCong(content);
+        showToast('✅ Đã lưu chữ ký thành công cho "' + tenChung2 + '". Giờ có thể bấm "Áp dụng chữ ký trên cho tất cả học viên" bên dưới để xác nhận hàng loạt.');
       };
     }
   }
