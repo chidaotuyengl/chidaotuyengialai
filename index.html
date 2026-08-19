@@ -2111,6 +2111,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const tenPho = {};
       xong.forEach(({r})=>{ if (r.nguoiKy) tenPho[r.nguoiKy] = (tenPho[r.nguoiKy]||0) + 1; });
       const tenPhoBienNhat = Object.keys(tenPho).sort((a,b)=>tenPho[b]-tenPho[a])[0] || state.dnpcTenKyChung || '';
+      // Ngày ký hiển thị = ngày ký phổ biến nhất trong danh sách đang xuất (thường tất cả cùng 1
+      // ngày do ký hàng loạt) — nếu không có ngày ký nào (trường hợp cũ trước khi có tính năng
+      // này), mới dùng tạm ngày hôm nay.
+      const ngayKyDem = {};
+      xong.forEach(({r})=>{ if (r.ngayKy) ngayKyDem[r.ngayKy] = (ngayKyDem[r.ngayKy]||0) + 1; });
+      const ngayKyPhoBien = Object.keys(ngayKyDem).sort((a,b)=>ngayKyDem[b]-ngayKyDem[a])[0] || todayISO();
+      const [ngayKyY,ngayKyM,ngayKyD] = [ngayKyPhoBien.slice(0,4), ngayKyPhoBien.slice(5,7), ngayKyPhoBien.slice(8,10)];
+      const ngayKyHtml = 'Gia Lai, ngày ' + (ngayKyD||'.....') + ' tháng ' + (ngayKyM||'.....') + ' năm ' + (ngayKyY || new Date().getFullYear());
       const anhKy = state.lastSignatureDataUrl || ((xong.find(x=>x.r.chuKyImage)||{}).r||{}).chuKyImage || '';
       const sig = await resizeSignatureForWord(anhKy, 110);
       // Bảng nội dung + chân ký DÙNG CHUNG cho cả 2 chế độ (tải file .doc thuần chữ, an toàn mọi máy —
@@ -2127,7 +2135,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           '<p style="margin-top:14px">Tổng số học viên đã phân công người hướng dẫn: <b>'+xong.length+'</b></p>' +
           '<table class="data"><thead><tr><th style="width:5%">STT</th><th style="width:18%">Học viên</th><th style="width:15%">Thời gian thực hành</th><th style="width:8%">Số tháng</th><th style="width:18%">Người hướng dẫn</th><th style="width:18%">Số CCHN</th><th style="width:18%">Ngày cấp</th></tr></thead>' +
           '<tbody>'+rowsHtml+'</tbody></table>' +
-          '<table class="sign-block"><tr><td style="width:50%">&nbsp;</td><td style="width:50%">Gia Lai, ngày ..... tháng ..... năm '+new Date().getFullYear()+'<br>TRƯỞNG KHOA<br><span class="sign-note">(Ký, ghi rõ họ tên)</span><br>' +
+          '<table class="sign-block"><tr><td style="width:50%">&nbsp;</td><td style="width:50%">'+ngayKyHtml+'<br>TRƯỞNG KHOA<br><span class="sign-note">(Ký, ghi rõ họ tên)</span><br>' +
             (coAnh ? chuKyImgHtmlForWord(sig, 'chuky1') : '<br><br><br><br>') +
             (tenPhoBienNhat ? '<div style="font-weight:bold">'+tenPhoBienNhat+'</div>' : '') +
           '</td></tr></table>';
@@ -2337,28 +2345,41 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const emp = state.employees.find(e=>e.id===hdId);
         const cnt = countMenteesAtRange(hdId, r.tuNgay, r.denNgay);
         if (cnt >= maxHD()){ alert('Người hướng dẫn này đã đủ '+maxHD()+' học viên trong khoảng thời gian này. Vui lòng chọn người khác.'); return; }
-        r.nguoiHuongDanId = hdId;
-        r.nguoiHuongDan = emp ? emp.hoTen : '';
-        r.nguoiKy = nguoiKy;
-        r.ngayKy = todayISO();
-        r.trangThai = 'Đã phân công';
-        t.giaiDoan = t.giaiDoan || [];
-        t.giaiDoan.push({
-          id: uid('gd'),
-          khoaId: r.khoaId, khoa: r.khoaTen,
-          nguoiHuongDanId: hdId, nguoiHuongDan: r.nguoiHuongDan,
-          tuNgay: r.tuNgay, denNgay: r.denNgay,
-          trangThai: 'Chưa bắt đầu',
-          noiDung: '',
-          ketQua: 'Chưa đánh giá',
-          nhanXet: '',
-          minhChungFile: '', minhChungFileType: '', minhChungFileName: '', minhChungLink: '',
-          dotLapKeHoachId: r.dotLapKeHoachId||'', dotLapKeHoachTen: r.dotLapKeHoachTen||'',
-        });
-        recomputeTraineeOverallStatus(t);
-        await saveTrainee(t);
-        showToast('Đã phân công người hướng dẫn cho học viên "'+t.hoTen+'".');
-        renderUnitPhanCong(content);
+        // Phản hồi ngay lập tức khi bấm — tránh tình trạng bấm xong không biết đang xử lý hay bị
+        // treo, phải ngồi chờ không rõ đúng/sai trong lúc thao tác lưu (có gọi mạng) đang chạy.
+        const originalBtnHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+        btn.innerHTML = '⏳ Đang lưu…';
+        try {
+          r.nguoiHuongDanId = hdId;
+          r.nguoiHuongDan = emp ? emp.hoTen : '';
+          r.nguoiKy = nguoiKy;
+          r.ngayKy = todayISO();
+          r.trangThai = 'Đã phân công';
+          t.giaiDoan = t.giaiDoan || [];
+          t.giaiDoan.push({
+            id: uid('gd'),
+            khoaId: r.khoaId, khoa: r.khoaTen,
+            nguoiHuongDanId: hdId, nguoiHuongDan: r.nguoiHuongDan,
+            tuNgay: r.tuNgay, denNgay: r.denNgay,
+            trangThai: 'Chưa bắt đầu',
+            noiDung: '',
+            ketQua: 'Chưa đánh giá',
+            nhanXet: '',
+            minhChungFile: '', minhChungFileType: '', minhChungFileName: '', minhChungLink: '',
+            dotLapKeHoachId: r.dotLapKeHoachId||'', dotLapKeHoachTen: r.dotLapKeHoachTen||'',
+          });
+          recomputeTraineeOverallStatus(t);
+          await saveTrainee(t);
+          showToast('✅ Đã phân công người hướng dẫn cho học viên "'+t.hoTen+'".');
+          renderUnitPhanCong(content);
+        } catch (err) {
+          btn.disabled = false;
+          btn.style.opacity = '';
+          btn.innerHTML = originalBtnHtml;
+          // saveTrainee() đã tự hiện alert lỗi chi tiết — không cần lặp lại ở đây.
+        }
       };
     });
 
@@ -2429,7 +2450,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (thieuTen.length){ alert('Vui lòng nhập "Tên người ký chung" ở trên (hoặc nhập tên người ký riêng cho từng học viên còn thiếu) trước khi áp dụng chữ ký.'); return; }
       const dataUrl = state.lastSignatureDataUrl;
       let thanhCong = 0, boQuaDuQuota = 0;
-      for (const { t, r } of targets){
+      btnBatchSign.disabled = true;
+      const originalBtnHtml2 = btnBatchSign.innerHTML;
+      for (let i=0;i<targets.length;i++){
+        const { t, r } = targets[i];
+        btnBatchSign.innerHTML = '⏳ Đang lưu ' + (i+1) + '/' + targets.length + ' — ' + (t.hoTen||'') + '…';
         const hdId = r.nguoiHuongDanId;
         const emp = state.employees.find(e=>e.id===hdId);
         const cnt = countMenteesAtRange(hdId, r.tuNgay, r.denNgay);
@@ -2453,10 +2478,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           dotLapKeHoachId: r.dotLapKeHoachId||'', dotLapKeHoachTen: r.dotLapKeHoachTen||'',
         });
         recomputeTraineeOverallStatus(t);
-        await saveTrainee(t);
-        thanhCong++;
+        try { await saveTrainee(t); thanhCong++; } catch(e){ /* saveTrainee đã tự báo lỗi, tiếp tục xử lý người kế tiếp */ }
       }
-      showToast('Đã áp dụng chữ ký & xác nhận cho ' + thanhCong + ' học viên.' + (boQuaDuQuota ? (' Bỏ qua ' + boQuaDuQuota + ' do người hướng dẫn đã đủ 5 học viên.') : ''));
+      btnBatchSign.disabled = false;
+      btnBatchSign.innerHTML = originalBtnHtml2;
+      showToast('✅ Đã áp dụng chữ ký & xác nhận cho ' + thanhCong + ' học viên.' + (boQuaDuQuota ? (' Bỏ qua ' + boQuaDuQuota + ' do người hướng dẫn đã đủ 5 học viên.') : ''));
       renderUnitPhanCong(content);
     };
 
