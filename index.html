@@ -8571,14 +8571,14 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const g = groups[khoaId];
         const tuNgays = g.items.map(x=>x.r.tuNgay).filter(Boolean).sort();
         const denNgays = g.items.map(x=>x.r.denNgay).filter(Boolean).sort();
-        return { khoaTen: g.khoaTen||'(Chưa rõ tên khoa)', tuNgay: tuNgays[0]||'', denNgay: denNgays[denNgays.length-1]||'' };
+        return { khoaTen: g.khoaTen||'(Chưa rõ tên khoa)', tuNgay: tuNgays[0]||'', denNgay: denNgays[denNgays.length-1]||'', soHV: g.items.length };
       }).sort((a,b)=> a.khoaTen.localeCompare(b.khoaTen,'vi'));
       const bodyHtml = '<p style="text-align:center;font-weight:bold;font-size:14pt;margin-bottom:0">Phụ lục I</p>' +
         '<p style="text-align:center;font-weight:bold;font-size:13pt;margin-top:0">DANH SÁCH CÁC KHOA HƯỚNG DẪN HỌC VIÊN THỰC HÀNH</p>' +
-        '<table class="data"><thead><tr><th style="width:8%">STT</th><th>Tên khoa/phòng</th><th style="width:20%">Từ ngày</th><th style="width:20%">Đến ngày</th></tr></thead><tbody>' +
-        rows.map((r,i)=> '<tr><td style="text-align:center">'+(i+1)+'</td><td>'+r.khoaTen+'</td><td style="text-align:center">'+fmtDate(r.tuNgay)+'</td><td style="text-align:center">'+fmtDate(r.denNgay)+'</td></tr>').join('') +
+        '<table class="data"><thead><tr><th style="width:6%">STT</th><th>Tên khoa/phòng</th><th style="width:10%">Số HV</th><th style="width:18%">Từ ngày</th><th style="width:18%">Đến ngày</th></tr></thead><tbody>' +
+        rows.map((r,i)=> '<tr><td style="text-align:center">'+(i+1)+'</td><td>'+r.khoaTen+'</td><td style="text-align:center">'+r.soHV+'</td><td style="text-align:center">'+fmtDate(r.tuNgay)+'</td><td style="text-align:center">'+fmtDate(r.denNgay)+'</td></tr>').join('') +
         '</tbody></table>';
-      previewWordDoc('Phụ lục — Danh sách khoa có học viên thực hành', bodyHtml, 'phu_luc_danh_sach_khoa_hoc_vien_' + todayISO() + '.doc', { landscape:false, margins:{ top:2, right:1.3, bottom:2, left:2.5 }, colWidths:[8,52,20,20] }, '⬇️ Tải file Word');
+      previewWordDoc('Phụ lục — Danh sách khoa có học viên thực hành', bodyHtml, 'phu_luc_danh_sach_khoa_hoc_vien_' + todayISO() + '.doc', { landscape:false, margins:{ top:2, right:1.3, bottom:2, left:2.5 }, colWidths:[6,44,10,20,20] }, '⬇️ Tải file Word');
     };
     // ====== Phụ lục — Danh sách học viên (đúng mẫu: STT / Họ tên / Năm sinh / Trình độ chuyên môn) ======
     function hocVienListRows(){
