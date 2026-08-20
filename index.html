@@ -466,6 +466,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     docChecklist: [],
     phieuTiepNhanSeq: 0,
     hiddenBuiltinMau: [],
+    cdtMauOverride: {},
     employeeId: null,
     traineeId: null,
     approveView: 'pending',
@@ -802,7 +803,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
     const [
       cfg, employeesRaw, pending, approvedLog, rejectedLog, rejectedEmployeesLog,
-      customTemplates, docChecklist, phieuTiepNhanSeq, hiddenBuiltinMau, adminUsers, trainees
+      customTemplates, docChecklist, phieuTiepNhanSeq, hiddenBuiltinMau, adminUsers, trainees, cdtMauOverride
     ] = await Promise.all([
       fetchJSON('system_config', { adminPin: "0000", units: [] }),
       fetchJSON('employees', []),
@@ -816,6 +817,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       fetchJSON('hidden_builtin_mau', []),
       fetchJSON('admin_users', []),
       (async ()=>{ try { return await loadAllTraineesSplit(); } catch(e){ return []; } })(),
+      fetchJSON('cdt_mau_override', {}),
     ]);
     state.config = cfg;
     ensureDanhMuc();
@@ -854,6 +856,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
     state.phieuTiepNhanSeq = phieuTiepNhanSeq;
     state.hiddenBuiltinMau = hiddenBuiltinMau;
+    state.cdtMauOverride = cdtMauOverride || {};
     state.adminUsers = adminUsers;
     // Đảm bảo đủ 5 tài khoản cho 5 nhân viên thuộc "Phòng Chỉ đạo tuyến" trong hệ thống — tự động bổ sung
     // người còn THIẾU mỗi lần mở app (không đụng/không trùng với tài khoản đã có sẵn của anh).
@@ -1110,6 +1113,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   async function saveDocChecklist(){ await window.storage.set('doc_checklist_config', JSON.stringify(state.docChecklist||[]), true); }
   async function savePhieuTiepNhanSeq(){ await window.storage.set('phieu_tiep_nhan_seq', JSON.stringify(state.phieuTiepNhanSeq||0), true); }
   async function saveHiddenBuiltinMau(){ await window.storage.set('hidden_builtin_mau', JSON.stringify(state.hiddenBuiltinMau||[]), true); }
+  async function saveCdtMauOverride(){ await window.storage.set('cdt_mau_override', JSON.stringify(state.cdtMauOverride||{}), true); }
   async function genSoPhieuTiepNhan(){
     state.phieuTiepNhanSeq = (state.phieuTiepNhanSeq||0) + 1;
     await savePhieuTiepNhanSeq();
@@ -7097,6 +7101,44 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       render();
     };
   }
+  function openCdtOverrideUploadModal(item){
+    const ov = (state.cdtMauOverride||{})[item.key];
+    const overlay = el(`<div class="modal-overlay"><div class="modal" style="max-width:480px">
+      <h3>✏️ Thay file cho mẫu — ${item.ten}</h3>
+      <p class="muted" style="margin-top:-6px">Tải lên file Word/PDF anh đã tự sửa. Từ lúc lưu, bấm "${item.ten}" sẽ tải đúng file này thay vì mẫu do hệ thống tự dựng.</p>
+      <div class="field"><label>Chọn file đã sửa (Word/PDF/ảnh) *</label><input id="cdtov-file" type="file" accept=".doc,.docx,.pdf,image/*" /></div>
+      <div id="cdtov-preview" class="muted" style="margin-top:6px">${ov ? 'Hiện đang dùng file riêng: 📄 ' + (ov.fileName||item.ten) : 'Chưa chọn file.'}</div>
+      <div class="row-flex" style="justify-content:flex-end;margin-top:14px">
+        <button class="secondary" id="cdtov-cancel">Hủy</button>
+        <button id="cdtov-save">💾 Lưu thay thế</button>
+      </div>
+    </div></div>`);
+    root.appendChild(overlay);
+    let pending = null;
+    overlay.querySelector('#cdtov-file').onchange = async (e)=>{
+      const file = e.target.files[0];
+      const prev = overlay.querySelector('#cdtov-preview');
+      if (!file) return;
+      prev.textContent = 'Đang xử lý…';
+      try {
+        pending = await readGenericFileAsDataURL(file);
+        prev.textContent = '📄 ' + pending.name + ' (mới)';
+      } catch(err){
+        prev.textContent = '⚠ ' + err.message;
+        pending = null;
+      }
+    };
+    overlay.querySelector('#cdtov-cancel').onclick = ()=> overlay.remove();
+    overlay.querySelector('#cdtov-save').onclick = async ()=>{
+      if (!pending){ alert('Vui lòng chọn file đã sửa.'); return; }
+      state.cdtMauOverride = state.cdtMauOverride || {};
+      state.cdtMauOverride[item.key] = { fileDataUrl: pending.dataUrl, fileName: pending.name, mime: pending.mime, updatedAt: todayISO() };
+      await saveCdtMauOverride();
+      overlay.remove();
+      showToast('Đã thay file cho mẫu "' + item.ten + '".');
+      render();
+    };
+  }
   function openReplaceCustomTemplateModal(c){
     const overlay = el(`<div class="modal-overlay"><div class="modal" style="max-width:480px">
       <h3>✏️ Thay file cho mẫu — ${c.ten}</h3>
@@ -7163,7 +7205,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       ${opts.allowManage ? `<details id="hv-mau-lib-cdt-details" ${state._hvMauLibCdtOpen?'open':''} style="margin-top:16px;border-top:1px solid var(--line);padding-top:12px">
       <summary style="cursor:pointer;font-size:14px;font-weight:bold;list-style:none">🏛️ Mẫu văn bản Phòng CĐT & Quyết định Giám đốc <span class="muted" style="font-weight:normal">(bản trống — lấy mẫu khi cần; học viên không thấy mục này; bấm để ${state._hvMauLibCdtOpen?'thu gọn':'mở rộng'})</span></summary>
       <p class="muted" style="margin-top:8px;font-style:italic">💡 Bản TỰ ĐIỀN theo từng học viên vẫn xuất từ modal "🏥 Phân khoa" và mục "📜 Quyết định" như quy trình chính — khu này chỉ để lấy mẫu trống khi cần soạn ngoài hệ thống.</p>
-      <div class="row-flex" style="flex-wrap:wrap;gap:8px">${CDT_MAU_LIBRARY.map(m=>`<button class="secondary" data-mau-cdt="${m.key}">📄 ${m.ten}</button>`).join('')}</div>
+      <p class="muted" style="margin-top:-4px;font-style:italic">💡 Thấy mẫu nào chưa đúng ý? Sửa trực tiếp trên Word rồi bấm "✏️ Thay file" ngay cạnh mẫu đó — không cần nhờ hỗ trợ kỹ thuật.</p>
+      <div class="row-flex" style="flex-wrap:wrap;gap:8px">${CDT_MAU_LIBRARY.map(m=>{
+        const ov = (state.cdtMauOverride||{})[m.key];
+        return `<span style="display:inline-flex;align-items:center;gap:4px">
+          <button class="secondary" data-mau-cdt="${m.key}">📄 ${m.ten}${ov?' <span class="muted" style="font-weight:normal">(đã thay file riêng)</span>':''}</button>
+          <button class="ghost small-btn" data-cdt-override-upload="${m.key}" title="Tải file Word/PDF đã sửa lên để thay cho mẫu chuẩn này">✏️ Thay file</button>
+          ${ov ? `<button class="ghost small-btn" data-cdt-override-clear="${m.key}" title="Bỏ file riêng, dùng lại mẫu chuẩn do hệ thống tự dựng">↩️ Dùng lại mẫu chuẩn</button>` : ''}
+        </span>`;
+      }).join('')}</div>
       </details>` : ''}
       ${opts.allowManage ? `<div class="row-flex" style="margin-top:12px;border-top:1px solid var(--line);padding-top:12px">
         <button id="hv-mau-add-btn">➕ Thêm mẫu mới vào thư viện</button>
@@ -7183,8 +7233,31 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
     container.querySelectorAll('[data-mau-cdt]').forEach(btn=>{
       const item = CDT_MAU_LIBRARY.find(m=>m.key===btn.getAttribute('data-mau-cdt'));
-      if (item) btn.onclick = ()=> MAU_FN_MAP[item.fn]();
+      if (!item) return;
+      const ov = (state.cdtMauOverride||{})[item.key];
+      btn.onclick = ov
+        ? ()=>{ const a=document.createElement('a'); a.href=ov.fileDataUrl; a.download=ov.fileName||(item.ten+'.doc'); document.body.appendChild(a); a.click(); a.remove(); }
+        : ()=> MAU_FN_MAP[item.fn]();
     });
+    if (opts.allowManage){
+      container.querySelectorAll('[data-cdt-override-upload]').forEach(btn=>{
+        btn.onclick = ()=>{
+          const item = CDT_MAU_LIBRARY.find(m=>m.key===btn.getAttribute('data-cdt-override-upload'));
+          if (item) openCdtOverrideUploadModal(item);
+        };
+      });
+      container.querySelectorAll('[data-cdt-override-clear]').forEach(btn=>{
+        btn.onclick = async ()=>{
+          const key = btn.getAttribute('data-cdt-override-clear');
+          if (!confirm('Bỏ file riêng và dùng lại mẫu chuẩn do hệ thống tự dựng?')) return;
+          state.cdtMauOverride = state.cdtMauOverride || {};
+          delete state.cdtMauOverride[key];
+          await saveCdtMauOverride();
+          showToast('Đã chuyển về dùng mẫu chuẩn.');
+          render();
+        };
+      });
+    }
     container.querySelectorAll('[data-mau-custom]').forEach(btn=>{
       btn.onclick = ()=>{
         const c = (state.customTemplates||[]).find(x=>x.id===btn.getAttribute('data-mau-custom'));
