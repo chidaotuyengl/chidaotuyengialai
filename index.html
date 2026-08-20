@@ -8720,12 +8720,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
   function renderAdminTrainees(content){
     const hvView = state.hvView || 'list';
-    setUrlPath(hvView === 'stats' ? 'hocvien/thong-ke' : (hvView === 'bykhoa' ? 'hocvien/theo-khoa' : 'hocvien/danh-sach'));
+    setUrlPath(hvView === 'stats' ? 'hocvien/thong-ke' : (hvView === 'bykhoa' ? 'hocvien/theo-khoa' : (hvView === 'duyet' ? 'hocvien/duyet-phu-luc' : 'hocvien/danh-sach')));
     content.innerHTML = `
       <div class="row-flex" style="margin-bottom:14px">
         <button class="${hvView==='list'?'':'secondary'}" data-hv-view="list">📋 Danh sách học viên</button>
         <button class="${hvView==='bykhoa'?'':'secondary'}" data-hv-view="bykhoa">🔗 Link phân công theo khoa</button>
         <button class="${hvView==='stats'?'':'secondary'}" data-hv-view="stats">📊 Thống kê tổng quan</button>
+        <button class="${hvView==='duyet'?'':'secondary'}" data-hv-view="duyet">📖 Duyệt Phụ lục I/II</button>
       </div>
       <div id="hv-view-wrap"></div>
     `;
@@ -8735,7 +8736,138 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const viewWrap = document.getElementById('hv-view-wrap');
     if (hvView === 'stats'){ renderTraineeStatsView(viewWrap); return; }
     if (hvView === 'bykhoa'){ renderTraineeByKhoaView(viewWrap); return; }
+    if (hvView === 'duyet'){ renderDuyetPhuLucView(viewWrap); return; }
     renderTraineeListView(viewWrap);
+  }
+
+  // ============ DUYỆT PHỤ LỤC I/II DẠNG LẬT TRANG (mỗi trang = 1 học viên) ============
+  function renderDuyetPhuLucView(content){
+    const list = visibleTrainees().slice().sort((a,b)=> (a.maHoSo||'').localeCompare(b.maHoSo||'', 'vi', {numeric:true}));
+    if (!list.length){ content.innerHTML = '<p class="muted">Chưa có học viên nào.</p>'; return; }
+    if (state._duyetIdx === undefined) state._duyetIdx = 0;
+    if (state._duyetIdx >= list.length) state._duyetIdx = list.length - 1;
+    if (state._duyetIdx < 0) state._duyetIdx = 0;
+    const t = list[state._duyetIdx];
+    const stages = (t.giaiDoan||[]).slice().sort((a,b)=>(a.tuNgay||'').localeCompare(b.tuNgay||''));
+    const stagesLaKeHoach = !stages.length && (t.deNghiPhanCongList||[]).length; // chưa có giai đoạn chính thức, chỉ có kế hoạch chờ khoa xác nhận
+    const planStages = stagesLaKeHoach ? (t.deNghiPhanCongList||[]).slice().sort((a,b)=>(a.tuNgay||'').localeCompare(b.tuNgay||'')) : [];
+    const tongThang = stages.reduce((s,x)=>s+monthsDecimal(x.tuNgay,x.denNgay),0);
+
+    if (state._duyetBatchFrom === undefined) state._duyetBatchFrom = '';
+    if (state._duyetBatchTo === undefined) state._duyetBatchTo = '';
+    // Học viên "khớp" = có ít nhất 1 giai đoạn chính thức trùng/đè lên khoảng Từ ngày–Đến ngày đã chọn.
+    const batchMatches = (!state._duyetBatchFrom && !state._duyetBatchTo) ? [] : list.filter(x=>{
+      const st = x.giaiDoan||[];
+      if (!st.length) return false;
+      const fFrom = state._duyetBatchFrom || '0000-01-01', fTo = state._duyetBatchTo || '9999-12-31';
+      return st.some(s=> (s.tuNgay||'0000-01-01') <= fTo && (s.denNgay||'9999-12-31') >= fFrom);
+    });
+
+    content.innerHTML = `
+      <div class="card" style="margin-bottom:14px">
+        <div style="font-weight:bold;margin-bottom:8px">📦 In hàng loạt theo khoảng ngày (mỗi học viên 1 trang, gộp chung 1 file)</div>
+        <div class="row-flex" style="gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div class="field" style="margin:0"><label>Từ ngày</label><input id="duyet-batch-from" type="date" value="${state._duyetBatchFrom}" /></div>
+          <div class="field" style="margin:0"><label>Đến ngày</label><input id="duyet-batch-to" type="date" value="${state._duyetBatchTo}" /></div>
+          <span class="muted" style="align-self:center">${(state._duyetBatchFrom||state._duyetBatchTo) ? batchMatches.length+' học viên khớp (có giai đoạn trong khoảng đã chọn)' : 'Chọn khoảng ngày để lọc học viên cần in gộp'}</span>
+        </div>
+        <div class="row-flex" style="margin-top:10px;flex-wrap:wrap;gap:8px">
+          <button type="button" id="duyet-batch-pl1" ${batchMatches.length?'':'disabled'}>👁 Xem trước & in Phụ lục I (gộp ${batchMatches.length||0} người)</button>
+          <button type="button" id="duyet-batch-pl2" ${batchMatches.length?'':'disabled'}>👁 Xem trước & in Phụ lục II (gộp ${batchMatches.length||0} người)</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="row-flex" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+          <div class="row-flex" style="gap:8px">
+            <button type="button" id="duyet-prev" ${state._duyetIdx===0?'disabled':''}>‹ Trước</button>
+            <button type="button" id="duyet-next" ${state._duyetIdx===list.length-1?'disabled':''}>Sau ›</button>
+            <span style="align-self:center;font-weight:600">Học viên ${state._duyetIdx+1} / ${list.length}</span>
+          </div>
+          <div class="row-flex" style="gap:8px">
+            <input id="duyet-jump" placeholder="🔎 Gõ tên hoặc mã hồ sơ rồi Enter để nhảy nhanh..." style="width:280px" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row-flex" style="justify-content:space-between;align-items:flex-start;flex-wrap:wrap">
+          <div>
+            <h3 style="margin:0 0 4px">${t.hoTen||''}</h3>
+            <p class="muted" style="margin:0">Mã hồ sơ: ${t.maHoSo||'—'} · ${t.chucDanhDangKy||''} · Tổng số tháng đã phân: <b>${tongThang.toFixed(1)}</b> tháng</p>
+          </div>
+          <button type="button" data-duyet-goto-full="${t.id}" class="ghost small-btn">↗ Mở đầy đủ hồ sơ này</button>
+        </div>
+
+        ${stagesLaKeHoach ? `<p style="background:#fdf6e3;border:1px solid #f0d78a;border-radius:6px;padding:8px 12px;margin-top:12px;font-size:13px">⚠ Học viên này <b>chưa có giai đoạn chính thức</b> (khoa chưa xác nhận xong) — bảng dưới đây đang hiện theo <b>kế hoạch dự kiến</b> (chờ khoa xác nhận), chỉ để tham khảo, chưa sửa/in Phụ lục chính thức được ở đây.</p>` : ''}
+
+        <div class="scroll-table-wrap" style="max-height:50vh;overflow-y:auto;margin-top:12px">
+        <table>
+          <thead><tr><th>Khoa</th><th>Từ ngày</th><th>Đến ngày</th><th>Số tháng</th><th>Người hướng dẫn</th><th>Trạng thái</th>${stagesLaKeHoach?'':'<th style="width:120px"></th>'}</tr></thead>
+          <tbody>${
+            stagesLaKeHoach
+            ? (planStages.length ? planStages.map(s=>`<tr><td>${s.khoaTen||''}</td><td>${fmtDate(s.tuNgay)}</td><td>${fmtDate(s.denNgay)}</td><td>${monthsDecimal(s.tuNgay,s.denNgay).toFixed(1)}</td><td class="muted">—</td><td class="muted">Chờ khoa xác nhận</td></tr>`).join('') : '<tr><td colspan="6" class="muted" style="text-align:center">Chưa có dữ liệu.</td></tr>')
+            : (stages.length ? stages.map((s,idx)=>`<tr><td>${s.khoa||''}</td><td>${fmtDate(s.tuNgay)}</td><td>${fmtDate(s.denNgay)}</td><td>${monthsDecimal(s.tuNgay,s.denNgay).toFixed(1)}</td><td>${s.nguoiHuongDan||'—'}</td><td>${s.trangThai||''}</td><td style="white-space:nowrap"><button type="button" class="ghost small-btn" data-duyet-sua="${s.id}">✏️ Sửa</button> <button type="button" class="ghost small-btn" data-duyet-xoa="${s.id}" title="Xoá dòng này (dùng khi bị trùng lặp)">🗑️ Xoá</button></td></tr>`).join('') : '<tr><td colspan="7" class="muted" style="text-align:center">Chưa có giai đoạn nào.</td></tr>')
+          }</tbody>
+        </table>
+        </div>
+
+        <div class="row-flex" style="margin-top:16px;flex-wrap:wrap;gap:8px">
+          <button type="button" id="duyet-xuat-pl1" ${!stages.length?'disabled title="Cần có giai đoạn chính thức trước"':''}>👁 Xem trước & in Phụ lục I</button>
+          <button type="button" id="duyet-xuat-pl2" ${!stages.length?'disabled title="Cần có giai đoạn chính thức trước"':''}>👁 Xem trước & in Phụ lục II</button>
+          <button type="button" class="secondary" id="duyet-xuat-qd" ${!stages.length?'disabled title="Cần có giai đoạn chính thức trước"':''}>📜 Xem trước & in Quyết định chính</button>
+        </div>
+        <p class="muted" style="margin-top:8px;font-size:12px">💡 Sửa xong 1 dòng ở bảng trên sẽ <b>tự lưu vào hệ thống ngay</b> — không cần bấm Lưu ở đâu khác. Bấm "Xem trước & in" sẽ mở khung xem trước ngay trên trình duyệt — trong đó có nút <b>🖨️ In / Lưu PDF</b> và <b>⬇️ Tải file Word</b>, theo đúng dữ liệu mới nhất (kể cả vừa sửa).</p>
+      </div>
+    `;
+
+    const goPrev = ()=>{ if (state._duyetIdx>0){ state._duyetIdx--; renderDuyetPhuLucView(content); } };
+    const goNext = ()=>{ if (state._duyetIdx<list.length-1){ state._duyetIdx++; renderDuyetPhuLucView(content); } };
+    content.querySelector('#duyet-prev').onclick = goPrev;
+    content.querySelector('#duyet-next').onclick = goNext;
+    content.querySelector('#duyet-jump').onkeydown = (e)=>{
+      if (e.key !== 'Enter') return;
+      const q = e.target.value.trim().toLowerCase();
+      if (!q) return;
+      const foundIdx = list.findIndex(x=> (x.hoTen||'').toLowerCase().includes(q) || (x.maHoSo||'').toLowerCase().includes(q));
+      if (foundIdx === -1){ alert('Không tìm thấy học viên khớp "'+e.target.value+'".'); return; }
+      state._duyetIdx = foundIdx;
+      renderDuyetPhuLucView(content);
+    };
+    content.querySelector('#duyet-batch-from').onchange = (e)=>{ state._duyetBatchFrom = e.target.value; renderDuyetPhuLucView(content); };
+    content.querySelector('#duyet-batch-to').onchange = (e)=>{ state._duyetBatchTo = e.target.value; renderDuyetPhuLucView(content); };
+    const batchPl1Btn = content.querySelector('#duyet-batch-pl1');
+    if (batchPl1Btn) batchPl1Btn.onclick = ()=> exportPL1Batch(batchMatches, 'preview');
+    const batchPl2Btn = content.querySelector('#duyet-batch-pl2');
+    if (batchPl2Btn) batchPl2Btn.onclick = ()=> exportPL2Batch(batchMatches, 'preview');
+    const gotoFullBtn = content.querySelector('[data-duyet-goto-full]');
+    if (gotoFullBtn) gotoFullBtn.onclick = ()=> setUrlPath('hocvien/phan-khoa/' + slugName(t.hoTen));
+    content.querySelectorAll('[data-duyet-sua]').forEach(btn=>{
+      btn.onclick = ()=>{
+        const stage = (t.giaiDoan||[]).find(s=>s.id===btn.getAttribute('data-duyet-sua'));
+        if (stage) openEditStageModal(stage, t, ()=> renderDuyetPhuLucView(content));
+      };
+    });
+    content.querySelectorAll('[data-duyet-xoa]').forEach(btn=>{
+      btn.onclick = async ()=>{
+        const stageId = btn.getAttribute('data-duyet-xoa');
+        const idx = (t.giaiDoan||[]).findIndex(s=>s.id===stageId);
+        if (idx === -1) return;
+        const s = t.giaiDoan[idx];
+        if (!confirm('Xoá dòng: '+(s.khoa||'')+' — '+fmtDate(s.tuNgay)+' đến '+fmtDate(s.denNgay)+'?\n\nDùng khi dòng này bị trùng lặp thừa. Không hoàn tác được.')) return;
+        t.giaiDoan.splice(idx,1);
+        recomputeTraineeOverallStatus(t);
+        await saveTrainee(t);
+        showToast('Đã xoá dòng.');
+        renderDuyetPhuLucView(content);
+      };
+    });
+    const pl1Btn = content.querySelector('#duyet-xuat-pl1');
+    if (pl1Btn) pl1Btn.onclick = ()=> exportDecisionPL1Doc(t, 'preview');
+    const pl2Btn = content.querySelector('#duyet-xuat-pl2');
+    if (pl2Btn) pl2Btn.onclick = ()=> exportDecisionPL2Doc(t, 'preview');
+    const qdBtn = content.querySelector('#duyet-xuat-qd');
+    if (qdBtn) qdBtn.onclick = ()=> exportDecisionMainDoc(t, 'preview');
   }
 
   // ---- Tổng hợp đề nghị phân công đang chờ theo TỪNG KHOA (gộp mọi học viên của khoa đó vào
@@ -11420,15 +11552,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       ' &nbsp;&nbsp; Ngày hiệu lực: <b>' + (qd.ngayKy?fmtDate(nextDayISO(qd.ngayKy)):'……') + '</b>)</div>';
   }
 
-  function exportDecisionPL1Doc(t){
+  // ---- Tách riêng phần "thân" Phụ lục I / Phụ lục II của 1 học viên (không kèm export trực tiếp) —
+  // để dùng chung được cho cả xuất RIÊNG 1 người và xuất GỘP NHIỀU người (mỗi người 1 trang). ----
+  function buildPL1BodyForTrainee(t){
     const qd = t.quyetDinh || {};
-    // Phụ lục I chỉ liệt kê "đi khoa nào — từ ngày đến ngày" — đây là điều PHÒNG CHỈ ĐẠO TUYẾN
-    // tự quyết định ngay từ lúc lập kế hoạch, không phụ thuộc việc khoa đã chọn xong người
-    // hướng dẫn hay chưa (đó là việc riêng của Phụ lục II). Vì vậy nếu học viên đã có kế hoạch
-    // do Phòng CĐT lập (deNghiPhanCongList) nhưng khoa CHƯA xác nhận xong hết (giaiDoan còn
-    // trống hoặc thiếu), vẫn ưu tiên lấy đúng theo kế hoạch đã lập để Phụ lục I có dữ liệu ngay,
-    // không phải chờ khoa. Nếu đã có giai đoạn chính thức (đã xác nhận) thì vẫn ưu tiên dùng nó
-    // vì đó là dữ liệu mới nhất/chắc chắn nhất.
     const stagesSourceIsPlan = !(t.giaiDoan && t.giaiDoan.length);
     const stages = stagesSourceIsPlan
       ? (t.deNghiPhanCongList||[]).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||'')).map(r=>({ khoa:r.khoaTen, tuNgay:r.tuNgay, denNgay:r.denNgay }))
@@ -11436,7 +11563,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const tongThang = stages.reduce((s,x)=>s+monthsDecimal(x.tuNgay,x.denNgay),0);
     const nRows = Math.max(stages.length, 1);
     const trinhDoCM = qd.trinhDoChuyenMon || t.chucDanhDangKy || '';
-    // Đúng mẫu gốc PL I: thông tin học viên nằm trong bảng (gộp ô dọc), mỗi dòng là 1 khoa thực hành
     const rows = stages.map((s,i)=>{
       const traineeCells = (i===0)
         ? '<td rowspan="'+nRows+'" style="text-align:center;vertical-align:middle">1</td>'
@@ -11452,10 +11578,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       rows + '<tr><td colspan="7" style="text-align:right;font-weight:bold">Cộng:</td><td style="text-align:center;font-weight:bold">' + tongThang.toFixed(1) + '</td></tr>' +
       '</tbody></table>' +
       (stagesSourceIsPlan && stages.length ? '<p style="font-style:italic;color:#b3261e;margin-top:8px">* Số liệu lấy theo kế hoạch luân khoa do Phòng Chỉ đạo tuyến lập — 1 số khoa có thể CHƯA xác nhận xong người hướng dẫn (xem chi tiết ở Phụ lục II). Cần rà soát lại trước khi trình ký chính thức nếu có thay đổi phát sinh.</p>' : '');
-    exportWordCustomDoc('PHỤ LỤC I - DANH SÁCH CÁC KHOA LÂM SÀNG THỰC HÀNH', decisionDocHeaderHtml(qd, t, 'PHỤ LỤC I<br>DANH SÁCH CÁC KHOA LÂM SÀNG THỰC HÀNH', { showNV:false }) + tableHtml, 'PL_I_danh_sach_khoa_lam_sang_'+(t.hoTen||'').replace(/\s+/g,'_')+'.doc', { landscape:true });
+    return decisionDocHeaderHtml(qd, t, 'PHỤ LỤC I<br>DANH SÁCH CÁC KHOA LÂM SÀNG THỰC HÀNH', { showNV:false }) + tableHtml;
   }
-
-  function exportDecisionPL2Doc(t){
+  function buildPL2BodyForTrainee(t){
     const qd = t.quyetDinh || {};
     const stages = (t.giaiDoan||[]).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||''));
     const tongThang = stages.reduce((s,x)=>s+monthsDecimal(x.tuNgay,x.denNgay),0);
@@ -11469,7 +11594,30 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const tableHtml = '<table class="data"><thead><tr><th rowspan="2">STT</th><th rowspan="2">Họ và tên</th><th rowspan="2">Chức vụ</th><th rowspan="2">Chuyên môn</th><th rowspan="2">Khoa phòng</th><th rowspan="2">Số chứng chỉ</th><th colspan="3">Thời gian thực hành</th></tr><tr><th>Từ ngày</th><th>Đến ngày</th><th>Số tháng</th></tr></thead><tbody>' +
       rows + '<tr><td colspan="8" style="text-align:right;font-weight:bold">Cộng:</td><td style="text-align:center;font-weight:bold">' + tongThang.toFixed(1) + '</td></tr>' +
       '</tbody></table>';
-    exportWordCustomDoc('PHỤ LỤC II - DANH SÁCH PHÂN CÔNG NGƯỜI HƯỚNG DẪN THỰC HÀNH', decisionDocHeaderHtml(qd, t, 'PHỤ LỤC II<br>DANH SÁCH PHÂN CÔNG NGƯỜI HƯỚNG DẪN THỰC HÀNH') + tableHtml, 'PL_II_phan_cong_huong_dan_'+(t.hoTen||'').replace(/\s+/g,'_')+'.doc', { landscape:true });
+    return decisionDocHeaderHtml(qd, t, 'PHỤ LỤC II<br>DANH SÁCH PHÂN CÔNG NGƯỜI HƯỚNG DẪN THỰC HÀNH') + tableHtml;
+  }
+  // "Trang bìa" tên học viên chèn trước mỗi phần khi gộp nhiều người vào 1 file, để dễ nhận ra
+  // đang xem/in tới ai (không bắt buộc, chỉ hiện 1 dòng nhỏ phía trên bảng của người đó).
+  function traineeBatchLabelHtml(t, idx){
+    return '<p style="font-size:9pt;color:#888;margin:0 0 2px">Học viên '+(idx+1)+': '+(t.hoTen||'')+' — '+(t.maHoSo||'')+'</p>';
+  }
+  function exportDecisionPL1Doc(t, mode){
+    outputWordDoc(mode, 'PHỤ LỤC I - DANH SÁCH CÁC KHOA LÂM SÀNG THỰC HÀNH', buildPL1BodyForTrainee(t), 'PL_I_danh_sach_khoa_lam_sang_'+(t.hoTen||'').replace(/\s+/g,'_')+'.doc', { landscape:true });
+  }
+  function exportDecisionPL2Doc(t, mode){
+    outputWordDoc(mode, 'PHỤ LỤC II - DANH SÁCH PHÂN CÔNG NGƯỜI HƯỚNG DẪN THỰC HÀNH', buildPL2BodyForTrainee(t), 'PL_II_phan_cong_huong_dan_'+(t.hoTen||'').replace(/\s+/g,'_')+'.doc', { landscape:true });
+  }
+  // ---- Xuất GỘP Phụ lục I / II cho NHIỀU học viên cùng lúc — mỗi học viên 1 trang riêng (ngắt
+  // trang), trong đúng 1 file Word duy nhất — dùng khi cần in loạt theo khoảng Từ ngày–Đến ngày. ----
+  function exportPL1Batch(traineeList, mode){
+    if (!traineeList.length){ alert('Không có học viên nào khớp khoảng ngày đã chọn.'); return; }
+    const body = traineeList.map((t,idx)=> '<div style="'+(idx>0?'page-break-before:always;':'')+'">' + traineeBatchLabelHtml(t,idx) + buildPL1BodyForTrainee(t) + '</div>').join('');
+    outputWordDoc(mode, 'PHỤ LỤC I - DANH SÁCH CÁC KHOA LÂM SÀNG THỰC HÀNH (GỘP '+traineeList.length+' HỌC VIÊN)', body, 'PL_I_gop_'+traineeList.length+'_hoc_vien.doc', { landscape:true });
+  }
+  function exportPL2Batch(traineeList, mode){
+    if (!traineeList.length){ alert('Không có học viên nào khớp khoảng ngày đã chọn.'); return; }
+    const body = traineeList.map((t,idx)=> '<div style="'+(idx>0?'page-break-before:always;':'')+'">' + traineeBatchLabelHtml(t,idx) + buildPL2BodyForTrainee(t) + '</div>').join('');
+    outputWordDoc(mode, 'PHỤ LỤC II - DANH SÁCH PHÂN CÔNG NGƯỜI HƯỚNG DẪN THỰC HÀNH (GỘP '+traineeList.length+' HỌC VIÊN)', body, 'PL_II_gop_'+traineeList.length+'_hoc_vien.doc', { landscape:true });
   }
 
   // Phụ lục: DANH SÁCH ĐĂNG KÝ NGƯỜI HƯỚNG DẪN THỰC HÀNH — văn bản Phòng CĐT gửi khoa/phòng
@@ -11545,7 +11693,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       '<p style="font-style:italic">Xét đơn đề nghị của ' + tenNguoiDeNghi + ';</p>' +
       '<p style="font-style:italic">Theo đề nghị Trưởng phòng Chỉ đạo tuyến Bệnh viện.</p>';
   }
-  function exportDecisionMainDoc(t){
+  function exportDecisionMainDoc(t, mode){
     const qd = t.quyetDinh || {};
     // Cùng nguyên tắc như Phụ lục I: nếu chưa có giai đoạn đã xác nhận, lấy tạm theo kế hoạch
     // Phòng CĐT đã lập (deNghiPhanCongList) để KHÔNG bị trống ngày/tháng trên bản dự thảo.
@@ -11582,7 +11730,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         '<td style="width:50%;vertical-align:top"><i><b>Nơi nhận:</b><br>- Như Điều 3;<br>- Lãnh đạo Bệnh viện;<br>- Lưu: VT, PCĐT.</i></td>' +
         '<td style="width:50%;text-align:center;font-weight:bold">GIÁM ĐỐC<br><span class="sign-note">(Ký, ghi rõ họ tên, đóng dấu)</span><br><br><br><br>' + (qd.nguoiKyGiamDoc||'') + '</td>' +
       '</tr></table>';
-    exportWordCustomDoc('QUYẾT ĐỊNH về việc phân công người hướng dẫn thực hành', body, 'quyet_dinh_phan_cong_huong_dan_'+(t.hoTen||'').replace(/\s+/g,'_')+'.doc', { landscape:false });
+    outputWordDoc(mode, 'QUYẾT ĐỊNH về việc phân công người hướng dẫn thực hành', body, 'quyet_dinh_phan_cong_huong_dan_'+(t.hoTen||'').replace(/\s+/g,'_')+'.doc', { landscape:false });
   }
 
   // ===== BÁO CÁO ĐỊNH KỲ (tháng/quý) — tổng hợp công tác tiếp nhận & tổ chức thực hành =====
@@ -11767,22 +11915,57 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function previewWordDoc(title, bodyHtml, filename, opts, downloadLabel, imageParts, downloadBodyHtml){
     setUrlPath('xem-van-ban/' + (filename||'').replace(/\.(doc|docx)$/i,''));
     const html = buildWordDocHtml(title, bodyHtml, opts);
-    const overlay = el(`<div class="modal-overlay"><div class="modal" style="max-width:96vw;width:96vw;max-height:94vh;display:flex;flex-direction:column">
+    const overlay = el(`<div class="modal-overlay"><div class="modal" id="pv-modal" style="max-width:96vw;width:96vw;max-height:94vh;display:flex;flex-direction:column">
       <div class="row-flex" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
         <h3 style="margin:0;font-size:14px">👁 ${title}</h3>
         <div class="row-flex" style="gap:6px">
+          <button type="button" class="ghost small-btn" id="pv-zoom-out" title="Thu nhỏ nội dung">🔍−</button>
+          <span id="pv-zoom-label" class="muted" style="align-self:center;min-width:38px;text-align:center;font-size:12px">100%</span>
+          <button type="button" class="ghost small-btn" id="pv-zoom-in" title="Phóng to nội dung">🔍+</button>
+          <button type="button" class="ghost small-btn" id="pv-fullscreen" title="Phóng to toàn màn hình">⛶ Toàn màn hình</button>
           <button type="button" class="secondary" id="pv-print">🖨️ In / Lưu PDF</button>
           <button type="button" class="secondary" id="pv-download">${downloadLabel || '⬇️ Tải file Word'}</button>
           <button type="button" id="pv-close">Đóng</button>
         </div>
       </div>
       <p class="muted" style="margin:6px 0 8px;font-size:12px">💡 Nếu đang mở trong Zalo mà không tải/in được: bấm nút ⋯ góc trên và chọn "Mở bằng trình duyệt" (Safari/Chrome) rồi thao tác lại.</p>
-      <iframe id="pv-frame" style="flex:1;width:100%;min-height:60vh;border:1px solid var(--line);border-radius:6px;background:#fff"></iframe>
+      <div id="pv-frame-wrap" style="flex:1;overflow:auto;border:1px solid var(--line);border-radius:6px;background:#e9e9e9">
+        <iframe id="pv-frame" style="width:100%;height:100%;min-height:60vh;border:none;background:#fff;transform-origin:top left"></iframe>
+      </div>
     </div></div>`);
     root.appendChild(overlay);
     const frame = overlay.querySelector('#pv-frame');
+    const frameWrap = overlay.querySelector('#pv-frame-wrap');
     frame.srcdoc = html;
     overlay.querySelector('#pv-close').onclick = ()=> overlay.remove();
+    // ---- Phóng to / thu nhỏ nội dung xem trước (giữ nguyên tỉ lệ trang, không làm vỡ layout bảng) ----
+    let zoom = 100;
+    function applyZoom(){
+      overlay.querySelector('#pv-zoom-label').textContent = zoom + '%';
+      const scale = zoom / 100;
+      frame.style.transform = 'scale(' + scale + ')';
+      frame.style.width = (100 / scale) + '%';
+      frame.style.height = (100 / scale) + '%';
+    }
+    overlay.querySelector('#pv-zoom-in').onclick = ()=>{ zoom = Math.min(200, zoom + 10); applyZoom(); };
+    overlay.querySelector('#pv-zoom-out').onclick = ()=>{ zoom = Math.max(50, zoom - 10); applyZoom(); };
+    // ---- Phóng to toàn màn hình (modal chiếm hết viewport, dễ đọc/rà soát hơn) ----
+    let isFull = false;
+    overlay.querySelector('#pv-fullscreen').onclick = (e)=>{
+      const modalEl = overlay.querySelector('#pv-modal');
+      isFull = !isFull;
+      if (isFull){
+        modalEl.style.maxWidth = '100vw'; modalEl.style.width = '100vw';
+        modalEl.style.maxHeight = '100vh'; modalEl.style.height = '100vh';
+        modalEl.style.borderRadius = '0';
+        e.target.textContent = '⛶ Thu nhỏ';
+      } else {
+        modalEl.style.maxWidth = '96vw'; modalEl.style.width = '96vw';
+        modalEl.style.maxHeight = '94vh'; modalEl.style.height = '';
+        modalEl.style.borderRadius = '';
+        e.target.textContent = '⛶ Toàn màn hình';
+      }
+    };
     // Nếu có ảnh (imageParts, VD chữ ký) → tải bằng MHTML (exportWordWithImages) để Word mở ảnh ổn
     // định trên mọi máy, thay vì nhúng base64 trực tiếp (dễ bị Word báo lỗi "linked image"). Bản xem
     // trước trong khung iframe vẫn dùng bodyHtml gốc (base64) vì trình duyệt hiển thị base64 bình
@@ -12396,8 +12579,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   function openEditStageModal(stage, t, onDone){
     const unitOptions = state.config.units.slice().sort((a,b)=>a.name.localeCompare(b.name));
-    const overlay = el(`<div class="modal-overlay"><div class="modal">
-      <h3>✏️ Sửa giai đoạn thực hành — ${t.hoTen}</h3>
+    const overlay = el(`<div class="modal-overlay"><div class="modal" id="es-modal">
+      <div class="row-flex" style="justify-content:space-between;align-items:center">
+        <h3 style="margin:0">✏️ Sửa giai đoạn thực hành — ${t.hoTen}</h3>
+        <button type="button" class="ghost small-btn" id="es-fullscreen" title="Phóng to">⛶ Phóng to</button>
+      </div>
       <div class="row-flex">
         <div class="field"><label>Khoa thực hành</label>
           <div id="es-khoa-ssel"></div>
@@ -12425,6 +12611,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
     </div></div>`);
     root.appendChild(overlay);
+    let esIsFull = false;
+    overlay.querySelector('#es-fullscreen').onclick = (e)=>{
+      const modalEl = overlay.querySelector('#es-modal');
+      esIsFull = !esIsFull;
+      if (esIsFull){
+        modalEl.style.maxWidth = '96vw'; modalEl.style.width = '96vw';
+        modalEl.style.fontSize = '1.25em';
+        e.target.textContent = '⛶ Thu nhỏ';
+      } else {
+        modalEl.style.maxWidth = ''; modalEl.style.width = '';
+        modalEl.style.fontSize = '';
+        e.target.textContent = '⛶ Phóng to';
+      }
+    };
 
     let esKhoaId = stage.khoaId || '';
     let esHdId = stage.nguoiHuongDanId || '';
