@@ -7119,6 +7119,170 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
   }
 
+  const MAU_SOURCE_CATALOG = [
+    { nhom:'core', fn:'buildWordDocHtml', ten:'Dựng khung HTML văn bản Word (khổ giấy, lề, font)', deps:[] },
+    { nhom:'core', fn:'wordDocDataUrl', ten:'Chuyển khung HTML thành data URL để tải/xem trước', deps:['buildWordDocHtml'] },
+    { nhom:'core', fn:'exportWordCustomDoc', ten:'Hàm xuất Word chính — hầu hết các mẫu gọi ở bước cuối', deps:['buildWordDocHtml','setUrlPath'] },
+    { nhom:'core', fn:'previewWordDoc', ten:'Hiện màn xem trước trước khi tải file Word', deps:['buildWordDocHtml','el','exportWordCustomDoc','exportWordWithImages','setUrlPath'] },
+    { nhom:'core', fn:'outputWordDoc', ten:'Điều phối xuất trực tiếp / xem trước', deps:['exportWordCustomDoc','previewWordDoc'] },
+    { nhom:'core', fn:'exportWordTable', ten:'Xuất 1 bảng dữ liệu ra Word', deps:['buildSummaryTableHtml','todayISO','vietnameseDateLong'] },
+    { nhom:'core', fn:'exportWordWithImages', ten:'Xuất Word có kèm ảnh (chữ ký scan)', deps:['buildMhtmlDoc','exportWordCustomDoc','setUrlPath'] },
+    { nhom:'blank', fn:'exportMauDonDeNghi', ten:'Đơn đề nghị thực hành', deps:['exportWordCustomDoc','quocHieuBlockHtml'] },
+    { nhom:'blank', fn:'exportMauBanCamKet', ten:'Bản cam kết', deps:['exportWordCustomDoc'] },
+    { nhom:'blank', fn:'exportMauSoYeuLyLich', ten:'Sơ yếu lý lịch', deps:['exportWordCustomDoc','quocHieuBlockHtml'] },
+    { nhom:'blank', fn:'exportMauPhieuTiepNhan', ten:'Phiếu tiếp nhận học viên', deps:['exportWordCustomDoc'] },
+    { nhom:'blank', fn:'exportMauBanNhanXet', ten:'Bản nhận xét (từng giai đoạn)', deps:['bvKhoaHeaderTableHtml','exportWordCustomDoc'] },
+    { nhom:'blank', fn:'exportMauCongVanPhanCong', ten:'Công văn phân công học viên & người hướng dẫn', deps:['congVanCanCuHtml','congVanTrachNhiemKhoaHtml','exportWordCustomDoc'] },
+    { nhom:'blank', fn:'exportMauGiayGioiThieu', ten:'Giấy giới thiệu', deps:['exportWordCustomDoc','giayGioiThieuBodyHtml'] },
+    { nhom:'blank', fn:'exportMauGiayXacNhanHoanThanh', ten:'Giấy xác nhận hoàn thành thực hành', deps:['exportWordCustomDoc','giayXacNhanHoanThanhBodyHtml'] },
+    { nhom:'blank', fn:'exportMauBanNhanXetTongHop', ten:'Bản nhận xét tổng hợp toàn khoá', deps:['banNhanXetTongHopBodyHtml','exportWordCustomDoc'] },
+    { nhom:'blank', fn:'exportMauQuyetDinhGiamDoc', ten:'Quyết định (khung ký Giám đốc)', deps:['exportWordCustomDoc','qdGiamDocCanCuHtml'] },
+    { nhom:'blank', fn:'exportMauPhuLucI', ten:'Phụ lục I — Danh sách khoa', deps:['exportWordCustomDoc','mauBlankRowsHtml','mauPLHeaderHtml'] },
+    { nhom:'blank', fn:'exportMauPhuLucII', ten:'Phụ lục II — Danh sách học viên', deps:['exportWordCustomDoc','mauBlankRowsHtml','mauPLHeaderHtml'] },
+    { nhom:'blank', fn:'exportMauPhuLucDangKyNHD', ten:'Phụ lục đăng ký người hướng dẫn', deps:['exportWordCustomDoc','mauBlankRowsHtml'] },
+    { nhom:'filled', fn:'exportPhieuPhanCongIn', ten:'Phiếu phân công (bản in)', deps:['exportWordCustomDoc','fmtDate','todayISO','vietnameseDateLong'] },
+    { nhom:'filled', fn:'exportPhieuTiepNhanFilled', ten:'Phiếu tiếp nhận (đã điền)', deps:['ensureTraineeDocs','exportWordCustomDoc','todayISO','traineeDocsSummary','vietnameseDateLong'] },
+    { nhom:'filled', fn:'exportBanNhanXetFilled', ten:'Bản nhận xét (đã điền)', deps:['bvKhoaHeaderTableHtml','exportWordCustomDoc','fmtDate'] },
+    { nhom:'filled', fn:'exportCongVanPhanCongFilled', ten:'Công văn phân công (đã điền)', deps:['congVanCanCuHtml','congVanTrachNhiemKhoaHtml','fmtDate','monthsDecimal','outputWordDoc','saveTrainee','todayISO','vietnameseDateLong'] },
+    { nhom:'filled', fn:'exportGiayGioiThieuFilled', ten:'Giấy giới thiệu (đã điền)', deps:['exportWordCustomDoc','fmtDate','giayGioiThieuBodyHtml'] },
+    { nhom:'filled', fn:'exportGiayXacNhanHoanThanhFilled', ten:'Giấy xác nhận hoàn thành (đã điền)', deps:['exportWordCustomDoc','fmtDate','giayXacNhanHoanThanhBodyHtml','monthsDecimal'] },
+    { nhom:'filled', fn:'exportBanNhanXetTongHopFilled', ten:'Bản nhận xét tổng hợp (đã điền)', deps:['banNhanXetTongHopBodyHtml','exportWordCustomDoc','fmtDate','monthsDecimal'] },
+    { nhom:'filled', fn:'exportDecisionPL1Doc', ten:'Phụ lục I đính kèm Quyết định (đã điền)', deps:['decisionDocHeaderHtml','exportWordCustomDoc','fmtDate','monthsDecimal'] },
+    { nhom:'filled', fn:'exportDecisionPL2Doc', ten:'Phụ lục II đính kèm Quyết định (đã điền)', deps:['decisionDocHeaderHtml','exportWordCustomDoc','fmtDate','monthsDecimal'] },
+    { nhom:'filled', fn:'exportPhuLucDangKyNHDFilled', ten:'Phụ lục đăng ký người hướng dẫn (đã điền)', deps:['fmtDate','fmtDateRange','outputWordDoc','resizeSignatureDataUrl'] },
+    { nhom:'filled', fn:'exportDecisionMainDoc', ten:'Quyết định chính (đã điền, Điều 1)', deps:['exportWordCustomDoc','fmtDate','monthsDecimal','nextDayISO','qdGiamDocCanCuHtml','todayISO','vietnameseDateLong'] },
+    { nhom:'filled', fn:'exportBaoCaoDinhKyFilled', ten:'Báo cáo định kỳ (đã điền số liệu)', deps:['computeByChucDanh','computeByUnit','computeInstructorStats','computeTraineeStats','exportWordCustomDoc','fmtDate','todayISO','vietnameseDateLong'] },
+    { nhom:'filled', fn:'exportKeHoachLuanKhoa', ten:'Kế hoạch luân khoa (đã điền)', deps:['keHoachLuanKhoaBody','outputWordDoc'] },
+    { nhom:'filled', fn:'exportPhanCongTongHopWord', ten:'Bảng tổng hợp phân công (Word, có chữ ký)', deps:['exportWordCustomDoc','fmtDate','fmtDateRange','quocHieuBlockHtml','reqFilesArr','resizeSignatureDataUrl'] },
+    { nhom:'filled', fn:'exportPhanCongTongHopExcel', ten:'Bảng tổng hợp phân công (Excel)', deps:['exportXlsxGeneric','fmtDate','reqFilesArr'] },
+  ];
+  const MAU_SOURCE_GROUP_LABELS = { core:'🧩 Hạ tầng dùng chung', blank:'📄 Mẫu biểu trống', filled:'✅ Mẫu tự động điền theo học viên/khoa' };
+  // ================== DANH MỤC MÃ NGUỒN MẪU (dành cho admin/kỹ thuật) ==================
+  function mauSourceCatalogGetFn(name){
+    const MAP = {
+      buildWordDocHtml, wordDocDataUrl, exportWordCustomDoc, previewWordDoc, outputWordDoc, exportWordTable, exportWordWithImages,
+      exportMauDonDeNghi, exportMauBanCamKet, exportMauSoYeuLyLich, exportMauPhieuTiepNhan, exportMauBanNhanXet, exportMauCongVanPhanCong,
+      exportMauGiayGioiThieu, exportMauGiayXacNhanHoanThanh, exportMauBanNhanXetTongHop, exportMauQuyetDinhGiamDoc, exportMauPhuLucI,
+      exportMauPhuLucII, exportMauPhuLucDangKyNHD,
+      exportPhieuPhanCongIn, exportPhieuTiepNhanFilled, exportBanNhanXetFilled, exportCongVanPhanCongFilled, exportGiayGioiThieuFilled,
+      exportGiayXacNhanHoanThanhFilled, exportBanNhanXetTongHopFilled, exportDecisionPL1Doc, exportDecisionPL2Doc, exportPhuLucDangKyNHDFilled,
+      exportDecisionMainDoc, exportBaoCaoDinhKyFilled, exportKeHoachLuanKhoa, exportPhanCongTongHopWord, exportPhanCongTongHopExcel,
+    };
+    return MAP[name];
+  }
+  function mauSourceCatalogBuildText(item, withDeps){
+    const fn = mauSourceCatalogGetFn(item.fn);
+    if (!fn) return '// Không tìm thấy hàm ' + item.fn;
+    let out = '// ===== ' + item.ten + ' (' + item.fn + ') =====\n' + fn.toString() + '\n';
+    if (withDeps && item.deps && item.deps.length){
+      item.deps.forEach(depName=>{
+        const depFn = mauSourceCatalogGetFn(depName);
+        if (depFn){
+          out += '\n// ---- Hàm phụ thuộc: ' + depName + ' ----\n' + depFn.toString() + '\n';
+        }
+      });
+    }
+    return out;
+  }
+  function downloadTextAsFile(text, filename){
+    const blob = new Blob([text], { type: 'text/javascript;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 4000);
+  }
+  function openMauSourceViewModal(item){
+    const withDeps = (item.deps && item.deps.length) ? true : false;
+    const text = mauSourceCatalogBuildText(item, withDeps);
+    const overlay = el(`<div class="modal-overlay"><div class="modal" style="max-width:820px">
+      <div class="row-flex" style="justify-content:space-between;align-items:center">
+        <h3 style="margin:0">🧩 ${item.ten}</h3>
+        <button type="button" class="secondary" id="msv-fullscreen" title="Phóng to">⛶ Phóng to</button>
+      </div>
+      <p class="muted" style="margin-top:-6px">Hàm: <code>${item.fn}</code>${item.deps && item.deps.length ? ' — kèm ' + item.deps.length + ' hàm phụ thuộc' : ''}</p>
+      <textarea id="msv-code" readonly style="width:100%;height:360px;font-family:monospace;font-size:12.5px;white-space:pre;overflow:auto"></textarea>
+      <div class="row-flex" style="justify-content:flex-end;margin-top:14px;gap:8px">
+        <button class="secondary" id="msv-copy">📋 Copy code</button>
+        <button class="secondary" id="msv-download">⬇ Tải file .js</button>
+        <button id="msv-close">Đóng</button>
+      </div>
+    </div></div>`);
+    root.appendChild(overlay);
+    const ta = overlay.querySelector('#msv-code');
+    ta.value = text;
+    let isFull = false;
+    overlay.querySelector('#msv-fullscreen').onclick = ()=>{
+      const modalEl = overlay.querySelector('.modal');
+      isFull = !isFull;
+      if (isFull){ modalEl.style.maxWidth = '98vw'; modalEl.style.width = '98vw'; ta.style.height = '70vh'; }
+      else { modalEl.style.maxWidth = '820px'; modalEl.style.width = ''; ta.style.height = '360px'; }
+    };
+    overlay.querySelector('#msv-copy').onclick = ()=>{
+      copyTextRobust(text, 'Đã copy mã nguồn — dán vào file .js hoặc gửi trực tiếp cho Claude.');
+    };
+    overlay.querySelector('#msv-download').onclick = ()=> downloadTextAsFile(text, item.fn + '.js');
+    overlay.querySelector('#msv-close').onclick = ()=> overlay.remove();
+  }
+  function renderMauSourceCatalogHtml(){
+    if (state._mauSrcOpen === undefined) state._mauSrcOpen = false;
+    const fv = state._mauSrcFilter || '';
+    const rows = MAU_SOURCE_CATALOG.filter(it=>{
+      if (!fv) return true;
+      const q = fv.toLowerCase();
+      return (it.ten||'').toLowerCase().includes(q) || (it.fn||'').toLowerCase().includes(q);
+    });
+    const bodyRows = rows.map((it, idx)=>`
+      <tr>
+        <td style="text-align:center;color:var(--muted)">${idx+1}</td>
+        <td><code style="font-size:11.5px">${it.fn}</code></td>
+        <td>${it.ten}</td>
+        <td style="font-size:12px">${MAU_SOURCE_GROUP_LABELS[it.nhom] || it.nhom}</td>
+        <td style="text-align:center">
+          <button type="button" class="ghost small-btn" data-msc-view="${it.fn}" title="Xem mã nguồn">🔗</button>
+        </td>
+        <td style="white-space:nowrap;text-align:center">
+          <button type="button" class="ghost small-btn" data-msc-view="${it.fn}" title="Xem">👁</button>
+          <button type="button" class="ghost small-btn" data-msc-dl="${it.fn}" title="Tải file .js (kèm phụ thuộc)">⬇</button>
+        </td>
+      </tr>`).join('');
+    return `<details class="card" id="mau-src-details" ${state._mauSrcOpen?'open':''}>
+      <summary style="cursor:pointer;font-size:14px;font-weight:bold;list-style:none">🧩 Danh mục mã nguồn mẫu (dành cho kỹ thuật) <span class="muted" style="font-weight:normal;font-size:12px">(${MAU_SOURCE_CATALOG.length} mẫu — bấm để ${state._mauSrcOpen?'thu gọn':'mở rộng'})</span></summary>
+      <p class="muted" style="margin-top:8px">Mỗi dòng là 1 hàm sinh văn bản Word/Excel trong hệ thống, lấy trực tiếp từ code đang chạy thật (không lệch bản). Thấy mẫu nào chưa chuẩn → bấm 👁 để đọc/copy, hoặc ⬇ để tải file .js (đã kèm sẵn các hàm phụ thuộc cần thiết) gửi cho Claude sửa.</p>
+      <div class="search-row" style="margin-bottom:10px">
+        <input id="msc-search" placeholder="🔎 Tìm theo tên mẫu hoặc tên hàm..." value="${fv}" />
+      </div>
+      <div class="scroll-table-wrap">
+      <table>
+        <thead><tr><th style="width:44px">STT</th><th style="width:220px">Mã mẫu (tên hàm)</th><th>Tên mẫu</th><th style="width:170px">Nhóm</th><th style="width:50px">Mẫu</th><th style="width:90px">Thao tác</th></tr></thead>
+        <tbody>${bodyRows || `<tr><td colspan="6" class="muted" style="text-align:center;padding:16px">Không tìm thấy mẫu nào khớp từ khoá.</td></tr>`}</tbody>
+      </table>
+      </div>
+    </details>`;
+  }
+  function bindMauSourceCatalog(container){
+    const details = container.querySelector('#mau-src-details');
+    if (details) details.ontoggle = ()=>{ state._mauSrcOpen = details.open; };
+    const searchInp = container.querySelector('#msc-search');
+    if (searchInp){
+      searchInp.oninput = debounce(()=>{ state._mauSrcFilter = searchInp.value; render(); }, 250);
+      searchInp.focus();
+      searchInp.setSelectionRange(searchInp.value.length, searchInp.value.length);
+    }
+    container.querySelectorAll('[data-msc-view]').forEach(btn=>{
+      btn.onclick = ()=>{
+        const item = MAU_SOURCE_CATALOG.find(x=>x.fn===btn.getAttribute('data-msc-view'));
+        if (item) openMauSourceViewModal(item);
+      };
+    });
+    container.querySelectorAll('[data-msc-dl]').forEach(btn=>{
+      btn.onclick = ()=>{
+        const item = MAU_SOURCE_CATALOG.find(x=>x.fn===btn.getAttribute('data-msc-dl'));
+        if (item) downloadTextAsFile(mauSourceCatalogBuildText(item, true), item.fn + '.js');
+      };
+    });
+  }
+
   function openDocChecklistManagerModal(onChanged){
     const overlay = el(`<div class="modal-overlay"><div class="modal" id="dcl-modal" style="max-width:720px">
       <div class="row-flex" style="justify-content:space-between;align-items:center">
@@ -10111,6 +10275,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div id="hv-table-wrap"></div>
       </div>
       ${renderHvMauLibraryHtml({ allowManage: !isReadOnlyRole(state.adminRole) })}
+      ${isFullAccessRole(state.adminRole) ? renderMauSourceCatalogHtml() : ''}
     `;
     function getFilteredList(){
       const q = (fv.q||'').trim().toLowerCase();
@@ -10266,6 +10431,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (document.getElementById('hv-stats-receipt')) document.getElementById('hv-stats-receipt').onclick = ()=> openReceiptStatsModal();
     if (document.getElementById('hv-bulk-plan')) document.getElementById('hv-bulk-plan').onclick = ()=> openBulkPlanModal(content);
     bindHvMauLibrary(content, { allowManage: true });
+    if (isFullAccessRole(state.adminRole)) bindMauSourceCatalog(content);
     document.getElementById('hv-export-word').onclick = ()=>{
       const list = getFilteredList();
       if (!list.length){ alert('Không có dữ liệu để xuất.'); return; }
