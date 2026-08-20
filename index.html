@@ -12007,10 +12007,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     refreshPendingAssignList();
     overlay.querySelector('#dnpc-send-btn').onclick = async ()=>{
       const tuNgay = overlay.querySelector('#dnpc-tuNgay').value;
-      const soThang = parseFloat(overlay.querySelector('#dnpc-soThang').value);
+      let soThang = parseFloat(overlay.querySelector('#dnpc-soThang').value);
       if (!dnpcKhoaId){ alert('Vui lòng chọn khoa dự kiến.'); return; }
       if (!tuNgay){ alert('Vui lòng nhập từ ngày.'); return; }
       if (!soThang || soThang <= 0){ alert('Vui lòng nhập số tháng hợp lệ.'); return; }
+      // Ép về đúng bội số 0,5 tháng (thực tế chỉ chia tròn tháng hoặc nửa tháng, không lẻ kiểu 2,1/0,9).
+      const soThangTron = Math.round(soThang*2)/2;
+      if (Math.abs(soThang - soThangTron) > 0.001){
+        if (!confirm('Số tháng đang nhập ('+soThang.toFixed(1)+') không tròn bội số 0,5. Hệ thống sẽ tự làm tròn thành '+soThangTron.toFixed(1)+' tháng — tiếp tục?')) return;
+      }
+      soThang = soThangTron;
       const khoaTen = (state.config.units.find(u=>u.id===dnpcKhoaId)||{}).name || '';
       const denNgay = addMonthsDecimalToDate(tuNgay, soThang);
       t.deNghiPhanCongList = t.deNghiPhanCongList || [];
@@ -12251,7 +12257,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       <div class="row-flex">
         <div class="field"><label>Từ ngày</label><input id="es-tuNgay" type="date" value="${stage.tuNgay||''}" /></div>
         <div class="field"><label>Đến ngày</label><input id="es-denNgay" type="date" value="${stage.denNgay||''}" /></div>
-        <div class="field"><label>Số tháng</label><input id="es-soThang" type="text" inputmode="decimal" value="${monthsDecimal(stage.tuNgay, stage.denNgay).toFixed(1)}" /></div>
+        <div class="field"><label>Số tháng <span class="muted" style="font-weight:normal">(chỉ tròn 0,5 tháng — VD: 1, 1.5, 2...)</span></label><input id="es-soThang" type="number" step="0.5" min="0.5" inputmode="decimal" value="${monthsDecimal(stage.tuNgay, stage.denNgay).toFixed(1)}" /></div>
       </div>
       <p class="muted" style="margin-top:-6px;margin-bottom:0">Có thể nhập "Đến ngày" để hệ thống tự tính ra Số tháng, hoặc nhập "Số tháng" để hệ thống tự tính ra "Đến ngày".</p>
       <div class="row-flex">
@@ -12312,6 +12318,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       overlay.querySelector('#es-denNgay').value = addMonthsDecimalToDate(tuNgay, m);
       refreshInstructorSelectEdit();
     };
+    // Khi rời khỏi ô (blur) hoặc bấm mũi tên tăng/giảm — ép về ĐÚNG bội số 0,5 tháng (không cho
+    // lưu lại số lẻ kiểu 2,1 / 0,9 do gõ tay không tròn), rồi tính lại "Đến ngày" theo đúng số đã
+    // làm tròn, để tổng các giai đoạn khi cộng lại luôn khớp bội số 0,5 như quy định thực tế.
+    overlay.querySelector('#es-soThang').onchange = ()=>{
+      const tuNgay = overlay.querySelector('#es-tuNgay').value;
+      let m = parseFloat(overlay.querySelector('#es-soThang').value.replace(',', '.'));
+      if (!tuNgay || !m || m<=0) return;
+      m = Math.round(m*2)/2;
+      overlay.querySelector('#es-soThang').value = m.toFixed(1);
+      overlay.querySelector('#es-denNgay').value = addMonthsDecimalToDate(tuNgay, m);
+      refreshInstructorSelectEdit();
+    };
 
     overlay.querySelector('#es-cancel').onclick = ()=> overlay.remove();
     overlay.querySelector('#es-save').onclick = async ()=>{
@@ -12323,6 +12341,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const tuNgay = overlay.querySelector('#es-tuNgay').value;
       const denNgay = overlay.querySelector('#es-denNgay').value;
       if (tuNgay && denNgay && denNgay < tuNgay){ errBox.textContent = '⚠ "Đến ngày" phải sau hoặc bằng "Từ ngày".'; errBox.style.display = 'block'; return; }
+      const soThangThucTe = monthsDecimal(tuNgay, denNgay);
+      const soThangTron = Math.round(soThangThucTe*2)/2;
+      if (Math.abs(soThangThucTe - soThangTron) > 0.05){
+        if (!confirm('⚠ Khoảng "Từ ngày–Đến ngày" đang chọn ra số tháng lẻ ('+soThangThucTe.toFixed(1)+' tháng), không tròn theo bội số 0,5 tháng như quy định thực tế (VD: 1, 1,5, 2 tháng...).\n\nVẫn lưu nguyên khoảng ngày này? (Bấm Hủy để quay lại chỉnh cho tròn tháng.)')) return;
+      }
       const hdId = esHdId;
       let hdName = '';
       if (hdId){
