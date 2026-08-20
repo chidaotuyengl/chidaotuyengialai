@@ -6758,6 +6758,110 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       '<p>Xin trân trọng cảm ơn!</p>' +
       '<table class="sign-block"><tr><td style="width:50%">&nbsp;</td><td style="width:50%">……, ngày ….. tháng ….. năm ……<br>TRƯỞNG PHÒNG CHỈ ĐẠO TUYẾN<br><span class="sign-note">(Ký, ghi rõ họ tên)</span><br><br><br><br></td></tr></table>';
   }
+  // ---- Hợp đồng thực hành khám bệnh, chữa bệnh (Mẫu 05 Phụ lục I, NĐ 96/2023/NĐ-CP) ----
+  function hopDongThucHanhBodyHtml(soHopDong, ngayKyText, hoTen, ongBa, ngaySinh, vanBang, diaChi, soCanCuoc, ngayCapCC, noiCapCC, diaDiemThucHanh, soThangText, tuNgayText, denNgayText, ngayHieuLucText){
+    return '<table class="kv" style="table-layout:fixed"><colgroup><col style="width:42%"><col style="width:58%"></colgroup><tr>' +
+        '<td style="width:42%">' +
+          '<div class="hd-org" style="font-size:11pt;white-space:nowrap" nowrap="nowrap">SỞ Y TẾ TỈNH GIA LAI<br><span class="hd-sub hd-underline">BỆNH VIỆN ĐA KHOA TRUNG TÂM</span></div>' +
+          '<div style="margin-top:8px;text-align:center">Số: ' + soHopDong + '/HĐTH-BVĐKTT</div>' +
+        '</td>' +
+        '<td style="width:58%" nowrap="nowrap">' +
+          '<div style="text-align:center;font-weight:bold;font-size:12.5pt;white-space:nowrap" nowrap="nowrap">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>' +
+          '<div style="text-align:center;font-weight:bold;text-decoration:underline">Độc lập - Tự do - Hạnh phúc</div>' +
+          '<div class="hd-place" style="font-style:italic">' + ngayKyText + '</div>' +
+        '</td>' +
+      '</tr></table>' +
+      '<div class="doc-title">HỢP ĐỒNG</div>' +
+      '<div class="doc-trichyeu">Thực hành khám bệnh, chữa bệnh</div>' +
+      '<p style="font-style:italic">Căn cứ Bộ luật Dân sự ngày 24 tháng 11 năm 2015;</p>' +
+      '<p style="font-style:italic">Căn cứ Luật Khám bệnh, chữa bệnh ngày 09 tháng 11 năm 2023;</p>' +
+      '<p style="font-style:italic">Căn cứ Nghị định số 96/2023/NĐ-CP ngày 30 tháng 12 năm 2023 của Chính phủ quy định chi tiết một số điều của Luật Khám bệnh, chữa bệnh;</p>' +
+      '<p>Hôm nay, ' + ngayKyText.replace(/^Gia Lai,\s*/i,'') + ', tại Bệnh viện Đa khoa Trung tâm chúng tôi gồm:</p>' +
+      '<p><b>BÊN A: Bệnh viện Đa khoa Trung tâm tỉnh Gia Lai</b></p>' +
+      '<p>Đại diện là ông: Nguyễn Hoành Cường</p>' +
+      '<p>Chức vụ: Giám đốc Bệnh viện</p>' +
+      '<p>Địa chỉ trụ sở: 106 Nguyễn Huệ, phường Quy Nhơn, tỉnh Gia Lai</p>' +
+      '<p>Điện thoại: 02563820998</p>' +
+      '<p><b>BÊN B: Người thực hành</b></p>' +
+      '<p>' + ongBa + ': ' + hoTen + '</p>' +
+      '<p>Ngày, tháng, năm sinh: ' + ngaySinh + '</p>' +
+      '<p>Văn bằng chuyên môn: ' + vanBang + '</p>' +
+      '<p>Địa chỉ thường trú: ' + diaChi + '</p>' +
+      '<p>Số Căn cước: ' + soCanCuoc + '. Ngày cấp: ' + ngayCapCC + '</p>' +
+      '<p>Nơi cấp: ' + noiCapCC + '</p>' +
+      '<p>Thỏa thuận ký kết hợp đồng thực hành khám bệnh, chữa bệnh theo các điều khoản sau đây:</p>' +
+      '<p><b>Điều 1. Thời gian, địa điểm và nội dung chuyên môn thực hành.</b></p>' +
+      '<p>1. Thời gian thực hành: ' + ongBa + ' ' + hoTen + ' có văn bằng chuyên môn ' + vanBang + ', được thực hành từ ' + soThangText + ' tháng (từ ' + tuNgayText + ' đến ngày ' + denNgayText + ').</p>' +
+      '<p>2. Địa điểm thực hành tại: ' + diaDiemThucHanh + ', thuộc Bệnh viện Đa khoa Trung tâm.</p>' +
+      '<p>3. Nội dung chuyên môn thực hành: Thực hành chuyên môn khám bệnh, chữa bệnh và hồi sức cấp cứu đối với chức danh ' + vanBang + '.</p>' +
+      '<p><b>Điều 2. Quyền và nghĩa vụ của Bên A.</b></p>' +
+      '<p>1. Bên A có quyền:</p>' +
+      '<p>a) Bố trí người hướng dẫn thực hành để hướng dẫn người thực hành thực hành theo đúng các điều khoản ghi trong Hợp đồng.</p>' +
+      '<p>b) Chấm dứt Hợp đồng thực hành hoặc các biện pháp xử lý khác nếu người thực hành vi phạm các thỏa thuận ghi trong Hợp đồng.</p>' +
+      '<p>c) Thu kinh phí thực hành: Miễn kinh phí thực hành.</p>' +
+      '<p>d) Các quyền khác (nếu có)</p>' +
+      '<p>2. Bên A có nghĩa vụ:</p>' +
+      '<p>a) Bảo đảm các điều kiện thuận lợi để người thực hành được thực hành theo đúng các thỏa thuận ghi trong Hợp đồng.</p>' +
+      '<p>b) Bảo đảm quyền lợi của người thực hành theo quy định của pháp luật (nếu có).</p>' +
+      '<p>c) Xác nhận quá trình thực hành theo đúng mẫu quy định tại Mẫu 07 Phụ lục I ban hành kèm theo Nghị định số 96/2023/NĐ-CP ngày 30 tháng 12 năm 2023 của Chính phủ.</p>' +
+      '<p><b>Điều 3. Quyền và nghĩa vụ của Bên B</b></p>' +
+      '<p>1. Bên B có quyền:</p>' +
+      '<p>a) Được thực hành khám bệnh, chữa bệnh, dưới sự giám sát của người hướng dẫn thực hành.</p>' +
+      '<p>b) Được cung cấp các phương tiện, thiết bị bảo hộ trong quá trình thực hành (nếu có)</p>' +
+      '<p>c) Được hưởng các quyền lợi theo quy định của pháp luật (nếu có).</p>' +
+      '<p>d) Được cấp giấy xác nhận quá trình thực hành.</p>' +
+      '<p>đ) Các quyền khác (nếu có).</p>' +
+      '<p>2. Bên B có nghĩa vụ:</p>' +
+      '<p>a) Chấp hành nội quy, quy chế chuyên môn của cơ sở khám bệnh, chữa bệnh.</p>' +
+      '<p>b) Hoàn thành những nhiệm vụ đã cam kết trong hợp đồng thực hành.</p>' +
+      '<p>c) Nộp kinh phí thực hành đầy đủ theo thỏa thuận với Bên A.</p>' +
+      '<p>d) Các nghĩa vụ khác (nếu có): Hoàn thành việc đóng phí thực hành theo thỏa thuận trước khi thực hành. Trong quá trình thực hành, người thực hành nghỉ thực hành thì phải báo cáo cơ sở thực hành (qua khoa, phòng thực hành) biết, xác nhận và báo cáo Bệnh viện thỏa thuận thanh lý hợp đồng thực hành. Trường hợp không báo cáo khoa, phòng Bệnh viện biết, Bệnh viện không xem xét giải quyết các vấn đề liên quan việc thực hành.</p>' +
+      '<p><b>Điều 4. Điều khoản thi hành</b></p>' +
+      '<p>1. Hợp đồng này có hiệu lực kể từ ngày ' + ngayHieuLucText + ' và sẽ hết hiệu lực khi kết thúc thời gian thực hành và các bên đã hoàn thành các nghĩa vụ của Hợp đồng.</p>' +
+      '<p>2. Hai bên cam kết thực hiện đúng những điều khoản nêu trên, bên nào vi phạm bên đó phải chịu trách nhiệm trước pháp luật. Trong quá trình thực hiện Hợp đồng, nếu xảy ra tranh chấp thì hai bên cùng nhau thương lượng giải quyết, nếu không thống nhất thì đưa ra Tòa án để giải quyết.</p>' +
+      '<p>3. Hợp đồng này làm thành hai bản có giá trị pháp lý như nhau, mỗi bên giữ một bản./.</p>' +
+      '<table class="sign-block" style="margin-top:10px"><colgroup><col style="width:50%"><col style="width:50%"></colgroup><tr>' +
+        '<td style="width:50%;text-align:center;white-space:nowrap"><b>NGƯỜI THỰC HÀNH</b><br><span class="sign-note">(Ký, ghi rõ họ tên)</span><br><br><br><br></td>' +
+        '<td style="width:50%;text-align:center;white-space:nowrap"><b>GIÁM ĐỐC</b><br><br><br><br><b>Nguyễn Hoành Cường</b></td>' +
+      '</tr></table>';
+  }
+  function exportMauHopDongThucHanh(){
+    const body = hopDongThucHanhBodyHtml(
+      '……', '……………, ngày …. tháng …. năm ……',
+      '……………………………………………', 'Ông/Bà', '…../…../……..',
+      '……………………………………', '……………………………………………………………',
+      '………………………', '…../…../……..', '……………………………………………………',
+      '……………………………………………………………………………', '……', '…../…../……..', '…../…../……..', '…../…../……..'
+    );
+    exportWordCustomDoc('HỢP ĐỒNG THỰC HÀNH KHÁM BỆNH, CHỮA BỆNH', body, 'mau_hop_dong_thuc_hanh.doc', { landscape:false });
+  }
+  function exportHopDongThucHanhFilled(t, mode){
+    if (mode !== 'preview'){
+      const nhap = prompt('Số hợp đồng thực hành (VD: 22) — để trống nếu chưa có số, ghi bổ sung sau:', t.soHopDongTH || '');
+      if (nhap === null) return;
+      t.soHopDongTH = nhap.trim();
+      saveTrainee(t);
+    }
+    const stages = (t.giaiDoan && t.giaiDoan.length)
+      ? (t.giaiDoan||[]).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||''))
+      : (t.deNghiPhanCongList||[]).slice().sort((a,b)=> (a.tuNgay||'').localeCompare(b.tuNgay||'')).map(r=>({ khoa:r.khoaTen, tuNgay:r.tuNgay, denNgay:r.denNgay }));
+    const tuNgay = stages.length ? stages[0].tuNgay : t.tuNgayDeNghi;
+    const denNgay = stages.length ? stages[stages.length-1].denNgay : t.denNgayDeNghi;
+    const tongThang = stages.reduce((s,x)=>s+monthsDecimal(x.tuNgay,x.denNgay),0);
+    const khoaList = Array.from(new Set(stages.map(s=>s.khoa).filter(Boolean)));
+    const diaDiem = khoaList.length ? khoaList.join(', ') : '……………………………………………';
+    const ngayKyISO = t.ngayKyHopDongTH || todayISO();
+    const ongBa = (t.gioiTinh==='Nữ' ? 'Bà' : 'Ông');
+    const body = hopDongThucHanhBodyHtml(
+      t.soHopDongTH || '……', 'Gia Lai, ' + vietnameseDateLong(ngayKyISO),
+      t.hoTen || '', ongBa, fmtDate(t.ngaySinh) || '……………',
+      t.chucDanhDangKy || '……………', '……………………………………………………………',
+      t.cccd || '……………', fmtDate(t.ngayCapCccd) || '……………', t.noiCapCccd || '……………………………………………………',
+      diaDiem, tongThang ? tongThang.toFixed(0) : '……', fmtDate(tuNgay) || '……………', fmtDate(denNgay) || '……………',
+      fmtDate(ngayKyISO) || '……………'
+    );
+    outputWordDoc(mode, 'HỢP ĐỒNG THỰC HÀNH KHÁM BỆNH, CHỮA BỆNH', body, 'hop_dong_thuc_hanh_'+(t.hoTen||'').replace(/\s+/g,'_')+'.doc', { landscape:false });
+  }
   function exportMauGiayGioiThieu(){
     const body = giayGioiThieuBodyHtml(
       '……………………………………………………',
@@ -6936,6 +7040,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     { key:'cdtPL2', ten:'Phụ lục II — Danh sách phân công người hướng dẫn', fn:'exportMauPhuLucII' },
     { key:'cdtGGT', ten:'Giấy giới thiệu học viên đến khoa', fn:'exportMauGiayGioiThieu' },
     { key:'cdtXacNhan', ten:'Giấy xác nhận hoàn thành thực hành', fn:'exportMauGiayXacNhanHoanThanh' },
+    { key:'cdtHopDong', ten:'Hợp đồng thực hành khám bệnh, chữa bệnh', fn:'exportMauHopDongThucHanh' },
   ];
   // ---- Mẫu tự do do Admin đính kèm thêm (đọc file gốc, không nén/không kiểm tra ảnh) ----
   function readGenericFileAsDataURL(file){
@@ -7071,7 +7176,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (libDetails) libDetails.ontoggle = ()=>{ state._hvMauLibOpen = libDetails.open; };
     const cdtDetails = container.querySelector('#hv-mau-lib-cdt-details');
     if (cdtDetails) cdtDetails.ontoggle = ()=>{ state._hvMauLibCdtOpen = cdtDetails.open; };
-    const MAU_FN_MAP = { exportMauDonDeNghi, exportMauBanCamKet, exportMauSoYeuLyLich, exportMauPhieuTiepNhan, exportMauBanNhanXet, exportMauCongVanPhanCong, exportMauGiayGioiThieu, exportMauGiayXacNhanHoanThanh, exportMauQuyetDinhGiamDoc, exportMauPhuLucI, exportMauPhuLucII, exportMauPhuLucDangKyNHD };
+    const MAU_FN_MAP = { exportMauDonDeNghi, exportMauBanCamKet, exportMauSoYeuLyLich, exportMauPhieuTiepNhan, exportMauBanNhanXet, exportMauCongVanPhanCong, exportMauGiayGioiThieu, exportMauGiayXacNhanHoanThanh, exportMauQuyetDinhGiamDoc, exportMauPhuLucI, exportMauPhuLucII, exportMauPhuLucDangKyNHD, exportMauHopDongThucHanh };
     container.querySelectorAll('[data-mau]').forEach(btn=>{
       const item = HV_MAU_LIBRARY.find(m=>m.key===btn.getAttribute('data-mau'));
       if (item && !btn.disabled) btn.onclick = ()=> MAU_FN_MAP[item.fn]();
@@ -7119,169 +7224,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     }
   }
 
-  const MAU_SOURCE_CATALOG = [
-    { nhom:'core', fn:'buildWordDocHtml', ten:'Dựng khung HTML văn bản Word (khổ giấy, lề, font)', deps:[] },
-    { nhom:'core', fn:'wordDocDataUrl', ten:'Chuyển khung HTML thành data URL để tải/xem trước', deps:['buildWordDocHtml'] },
-    { nhom:'core', fn:'exportWordCustomDoc', ten:'Hàm xuất Word chính — hầu hết các mẫu gọi ở bước cuối', deps:['buildWordDocHtml','setUrlPath'] },
-    { nhom:'core', fn:'previewWordDoc', ten:'Hiện màn xem trước trước khi tải file Word', deps:['buildWordDocHtml','el','exportWordCustomDoc','exportWordWithImages','setUrlPath'] },
-    { nhom:'core', fn:'outputWordDoc', ten:'Điều phối xuất trực tiếp / xem trước', deps:['exportWordCustomDoc','previewWordDoc'] },
-    { nhom:'core', fn:'exportWordTable', ten:'Xuất 1 bảng dữ liệu ra Word', deps:['buildSummaryTableHtml','todayISO','vietnameseDateLong'] },
-    { nhom:'core', fn:'exportWordWithImages', ten:'Xuất Word có kèm ảnh (chữ ký scan)', deps:['buildMhtmlDoc','exportWordCustomDoc','setUrlPath'] },
-    { nhom:'blank', fn:'exportMauDonDeNghi', ten:'Đơn đề nghị thực hành', deps:['exportWordCustomDoc','quocHieuBlockHtml'] },
-    { nhom:'blank', fn:'exportMauBanCamKet', ten:'Bản cam kết', deps:['exportWordCustomDoc'] },
-    { nhom:'blank', fn:'exportMauSoYeuLyLich', ten:'Sơ yếu lý lịch', deps:['exportWordCustomDoc','quocHieuBlockHtml'] },
-    { nhom:'blank', fn:'exportMauPhieuTiepNhan', ten:'Phiếu tiếp nhận học viên', deps:['exportWordCustomDoc'] },
-    { nhom:'blank', fn:'exportMauBanNhanXet', ten:'Bản nhận xét (từng giai đoạn)', deps:['bvKhoaHeaderTableHtml','exportWordCustomDoc'] },
-    { nhom:'blank', fn:'exportMauCongVanPhanCong', ten:'Công văn phân công học viên & người hướng dẫn', deps:['congVanCanCuHtml','congVanTrachNhiemKhoaHtml','exportWordCustomDoc'] },
-    { nhom:'blank', fn:'exportMauGiayGioiThieu', ten:'Giấy giới thiệu', deps:['exportWordCustomDoc','giayGioiThieuBodyHtml'] },
-    { nhom:'blank', fn:'exportMauGiayXacNhanHoanThanh', ten:'Giấy xác nhận hoàn thành thực hành', deps:['exportWordCustomDoc','giayXacNhanHoanThanhBodyHtml'] },
-    { nhom:'blank', fn:'exportMauBanNhanXetTongHop', ten:'Bản nhận xét tổng hợp toàn khoá', deps:['banNhanXetTongHopBodyHtml','exportWordCustomDoc'] },
-    { nhom:'blank', fn:'exportMauQuyetDinhGiamDoc', ten:'Quyết định (khung ký Giám đốc)', deps:['exportWordCustomDoc','qdGiamDocCanCuHtml'] },
-    { nhom:'blank', fn:'exportMauPhuLucI', ten:'Phụ lục I — Danh sách khoa', deps:['exportWordCustomDoc','mauBlankRowsHtml','mauPLHeaderHtml'] },
-    { nhom:'blank', fn:'exportMauPhuLucII', ten:'Phụ lục II — Danh sách học viên', deps:['exportWordCustomDoc','mauBlankRowsHtml','mauPLHeaderHtml'] },
-    { nhom:'blank', fn:'exportMauPhuLucDangKyNHD', ten:'Phụ lục đăng ký người hướng dẫn', deps:['exportWordCustomDoc','mauBlankRowsHtml'] },
-    { nhom:'filled', fn:'exportPhieuPhanCongIn', ten:'Phiếu phân công (bản in)', deps:['exportWordCustomDoc','fmtDate','todayISO','vietnameseDateLong'] },
-    { nhom:'filled', fn:'exportPhieuTiepNhanFilled', ten:'Phiếu tiếp nhận (đã điền)', deps:['ensureTraineeDocs','exportWordCustomDoc','todayISO','traineeDocsSummary','vietnameseDateLong'] },
-    { nhom:'filled', fn:'exportBanNhanXetFilled', ten:'Bản nhận xét (đã điền)', deps:['bvKhoaHeaderTableHtml','exportWordCustomDoc','fmtDate'] },
-    { nhom:'filled', fn:'exportCongVanPhanCongFilled', ten:'Công văn phân công (đã điền)', deps:['congVanCanCuHtml','congVanTrachNhiemKhoaHtml','fmtDate','monthsDecimal','outputWordDoc','saveTrainee','todayISO','vietnameseDateLong'] },
-    { nhom:'filled', fn:'exportGiayGioiThieuFilled', ten:'Giấy giới thiệu (đã điền)', deps:['exportWordCustomDoc','fmtDate','giayGioiThieuBodyHtml'] },
-    { nhom:'filled', fn:'exportGiayXacNhanHoanThanhFilled', ten:'Giấy xác nhận hoàn thành (đã điền)', deps:['exportWordCustomDoc','fmtDate','giayXacNhanHoanThanhBodyHtml','monthsDecimal'] },
-    { nhom:'filled', fn:'exportBanNhanXetTongHopFilled', ten:'Bản nhận xét tổng hợp (đã điền)', deps:['banNhanXetTongHopBodyHtml','exportWordCustomDoc','fmtDate','monthsDecimal'] },
-    { nhom:'filled', fn:'exportDecisionPL1Doc', ten:'Phụ lục I đính kèm Quyết định (đã điền)', deps:['decisionDocHeaderHtml','exportWordCustomDoc','fmtDate','monthsDecimal'] },
-    { nhom:'filled', fn:'exportDecisionPL2Doc', ten:'Phụ lục II đính kèm Quyết định (đã điền)', deps:['decisionDocHeaderHtml','exportWordCustomDoc','fmtDate','monthsDecimal'] },
-    { nhom:'filled', fn:'exportPhuLucDangKyNHDFilled', ten:'Phụ lục đăng ký người hướng dẫn (đã điền)', deps:['fmtDate','fmtDateRange','outputWordDoc','resizeSignatureDataUrl'] },
-    { nhom:'filled', fn:'exportDecisionMainDoc', ten:'Quyết định chính (đã điền, Điều 1)', deps:['exportWordCustomDoc','fmtDate','monthsDecimal','nextDayISO','qdGiamDocCanCuHtml','todayISO','vietnameseDateLong'] },
-    { nhom:'filled', fn:'exportBaoCaoDinhKyFilled', ten:'Báo cáo định kỳ (đã điền số liệu)', deps:['computeByChucDanh','computeByUnit','computeInstructorStats','computeTraineeStats','exportWordCustomDoc','fmtDate','todayISO','vietnameseDateLong'] },
-    { nhom:'filled', fn:'exportKeHoachLuanKhoa', ten:'Kế hoạch luân khoa (đã điền)', deps:['keHoachLuanKhoaBody','outputWordDoc'] },
-    { nhom:'filled', fn:'exportPhanCongTongHopWord', ten:'Bảng tổng hợp phân công (Word, có chữ ký)', deps:['exportWordCustomDoc','fmtDate','fmtDateRange','quocHieuBlockHtml','reqFilesArr','resizeSignatureDataUrl'] },
-    { nhom:'filled', fn:'exportPhanCongTongHopExcel', ten:'Bảng tổng hợp phân công (Excel)', deps:['exportXlsxGeneric','fmtDate','reqFilesArr'] },
-  ];
-  const MAU_SOURCE_GROUP_LABELS = { core:'🧩 Hạ tầng dùng chung', blank:'📄 Mẫu biểu trống', filled:'✅ Mẫu tự động điền theo học viên/khoa' };
-  // ================== DANH MỤC MÃ NGUỒN MẪU (dành cho admin/kỹ thuật) ==================
-  function mauSourceCatalogGetFn(name){
-    const MAP = {
-      buildWordDocHtml, wordDocDataUrl, exportWordCustomDoc, previewWordDoc, outputWordDoc, exportWordTable, exportWordWithImages,
-      exportMauDonDeNghi, exportMauBanCamKet, exportMauSoYeuLyLich, exportMauPhieuTiepNhan, exportMauBanNhanXet, exportMauCongVanPhanCong,
-      exportMauGiayGioiThieu, exportMauGiayXacNhanHoanThanh, exportMauBanNhanXetTongHop, exportMauQuyetDinhGiamDoc, exportMauPhuLucI,
-      exportMauPhuLucII, exportMauPhuLucDangKyNHD,
-      exportPhieuPhanCongIn, exportPhieuTiepNhanFilled, exportBanNhanXetFilled, exportCongVanPhanCongFilled, exportGiayGioiThieuFilled,
-      exportGiayXacNhanHoanThanhFilled, exportBanNhanXetTongHopFilled, exportDecisionPL1Doc, exportDecisionPL2Doc, exportPhuLucDangKyNHDFilled,
-      exportDecisionMainDoc, exportBaoCaoDinhKyFilled, exportKeHoachLuanKhoa, exportPhanCongTongHopWord, exportPhanCongTongHopExcel,
-    };
-    return MAP[name];
-  }
-  function mauSourceCatalogBuildText(item, withDeps){
-    const fn = mauSourceCatalogGetFn(item.fn);
-    if (!fn) return '// Không tìm thấy hàm ' + item.fn;
-    let out = '// ===== ' + item.ten + ' (' + item.fn + ') =====\n' + fn.toString() + '\n';
-    if (withDeps && item.deps && item.deps.length){
-      item.deps.forEach(depName=>{
-        const depFn = mauSourceCatalogGetFn(depName);
-        if (depFn){
-          out += '\n// ---- Hàm phụ thuộc: ' + depName + ' ----\n' + depFn.toString() + '\n';
-        }
-      });
-    }
-    return out;
-  }
-  function downloadTextAsFile(text, filename){
-    const blob = new Blob([text], { type: 'text/javascript;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=> URL.revokeObjectURL(url), 4000);
-  }
-  function openMauSourceViewModal(item){
-    const withDeps = (item.deps && item.deps.length) ? true : false;
-    const text = mauSourceCatalogBuildText(item, withDeps);
-    const overlay = el(`<div class="modal-overlay"><div class="modal" style="max-width:820px">
-      <div class="row-flex" style="justify-content:space-between;align-items:center">
-        <h3 style="margin:0">🧩 ${item.ten}</h3>
-        <button type="button" class="secondary" id="msv-fullscreen" title="Phóng to">⛶ Phóng to</button>
-      </div>
-      <p class="muted" style="margin-top:-6px">Hàm: <code>${item.fn}</code>${item.deps && item.deps.length ? ' — kèm ' + item.deps.length + ' hàm phụ thuộc' : ''}</p>
-      <textarea id="msv-code" readonly style="width:100%;height:360px;font-family:monospace;font-size:12.5px;white-space:pre;overflow:auto"></textarea>
-      <div class="row-flex" style="justify-content:flex-end;margin-top:14px;gap:8px">
-        <button class="secondary" id="msv-copy">📋 Copy code</button>
-        <button class="secondary" id="msv-download">⬇ Tải file .js</button>
-        <button id="msv-close">Đóng</button>
-      </div>
-    </div></div>`);
-    root.appendChild(overlay);
-    const ta = overlay.querySelector('#msv-code');
-    ta.value = text;
-    let isFull = false;
-    overlay.querySelector('#msv-fullscreen').onclick = ()=>{
-      const modalEl = overlay.querySelector('.modal');
-      isFull = !isFull;
-      if (isFull){ modalEl.style.maxWidth = '98vw'; modalEl.style.width = '98vw'; ta.style.height = '70vh'; }
-      else { modalEl.style.maxWidth = '820px'; modalEl.style.width = ''; ta.style.height = '360px'; }
-    };
-    overlay.querySelector('#msv-copy').onclick = ()=>{
-      copyTextRobust(text, 'Đã copy mã nguồn — dán vào file .js hoặc gửi trực tiếp cho Claude.');
-    };
-    overlay.querySelector('#msv-download').onclick = ()=> downloadTextAsFile(text, item.fn + '.js');
-    overlay.querySelector('#msv-close').onclick = ()=> overlay.remove();
-  }
-  function renderMauSourceCatalogHtml(){
-    if (state._mauSrcOpen === undefined) state._mauSrcOpen = false;
-    const fv = state._mauSrcFilter || '';
-    const rows = MAU_SOURCE_CATALOG.filter(it=>{
-      if (!fv) return true;
-      const q = fv.toLowerCase();
-      return (it.ten||'').toLowerCase().includes(q) || (it.fn||'').toLowerCase().includes(q);
-    });
-    const bodyRows = rows.map((it, idx)=>`
-      <tr>
-        <td style="text-align:center;color:var(--muted)">${idx+1}</td>
-        <td><code style="font-size:11.5px">${it.fn}</code></td>
-        <td>${it.ten}</td>
-        <td style="font-size:12px">${MAU_SOURCE_GROUP_LABELS[it.nhom] || it.nhom}</td>
-        <td style="text-align:center">
-          <button type="button" class="ghost small-btn" data-msc-view="${it.fn}" title="Xem mã nguồn">🔗</button>
-        </td>
-        <td style="white-space:nowrap;text-align:center">
-          <button type="button" class="ghost small-btn" data-msc-view="${it.fn}" title="Xem">👁</button>
-          <button type="button" class="ghost small-btn" data-msc-dl="${it.fn}" title="Tải file .js (kèm phụ thuộc)">⬇</button>
-        </td>
-      </tr>`).join('');
-    return `<details class="card" id="mau-src-details" ${state._mauSrcOpen?'open':''}>
-      <summary style="cursor:pointer;font-size:14px;font-weight:bold;list-style:none">🧩 Danh mục mã nguồn mẫu (dành cho kỹ thuật) <span class="muted" style="font-weight:normal;font-size:12px">(${MAU_SOURCE_CATALOG.length} mẫu — bấm để ${state._mauSrcOpen?'thu gọn':'mở rộng'})</span></summary>
-      <p class="muted" style="margin-top:8px">Mỗi dòng là 1 hàm sinh văn bản Word/Excel trong hệ thống, lấy trực tiếp từ code đang chạy thật (không lệch bản). Thấy mẫu nào chưa chuẩn → bấm 👁 để đọc/copy, hoặc ⬇ để tải file .js (đã kèm sẵn các hàm phụ thuộc cần thiết) gửi cho Claude sửa.</p>
-      <div class="search-row" style="margin-bottom:10px">
-        <input id="msc-search" placeholder="🔎 Tìm theo tên mẫu hoặc tên hàm..." value="${fv}" />
-      </div>
-      <div class="scroll-table-wrap">
-      <table>
-        <thead><tr><th style="width:44px">STT</th><th style="width:220px">Mã mẫu (tên hàm)</th><th>Tên mẫu</th><th style="width:170px">Nhóm</th><th style="width:50px">Mẫu</th><th style="width:90px">Thao tác</th></tr></thead>
-        <tbody>${bodyRows || `<tr><td colspan="6" class="muted" style="text-align:center;padding:16px">Không tìm thấy mẫu nào khớp từ khoá.</td></tr>`}</tbody>
-      </table>
-      </div>
-    </details>`;
-  }
-  function bindMauSourceCatalog(container){
-    const details = container.querySelector('#mau-src-details');
-    if (details) details.ontoggle = ()=>{ state._mauSrcOpen = details.open; };
-    const searchInp = container.querySelector('#msc-search');
-    if (searchInp){
-      searchInp.oninput = debounce(()=>{ state._mauSrcFilter = searchInp.value; render(); }, 250);
-      searchInp.focus();
-      searchInp.setSelectionRange(searchInp.value.length, searchInp.value.length);
-    }
-    container.querySelectorAll('[data-msc-view]').forEach(btn=>{
-      btn.onclick = ()=>{
-        const item = MAU_SOURCE_CATALOG.find(x=>x.fn===btn.getAttribute('data-msc-view'));
-        if (item) openMauSourceViewModal(item);
-      };
-    });
-    container.querySelectorAll('[data-msc-dl]').forEach(btn=>{
-      btn.onclick = ()=>{
-        const item = MAU_SOURCE_CATALOG.find(x=>x.fn===btn.getAttribute('data-msc-dl'));
-        if (item) downloadTextAsFile(mauSourceCatalogBuildText(item, true), item.fn + '.js');
-      };
-    });
-  }
 
   function openDocChecklistManagerModal(onChanged){
     const overlay = el(`<div class="modal-overlay"><div class="modal" id="dcl-modal" style="max-width:720px">
@@ -10275,7 +10217,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div id="hv-table-wrap"></div>
       </div>
       ${renderHvMauLibraryHtml({ allowManage: !isReadOnlyRole(state.adminRole) })}
-      ${isFullAccessRole(state.adminRole) ? renderMauSourceCatalogHtml() : ''}
     `;
     function getFilteredList(){
       const q = (fv.q||'').trim().toLowerCase();
@@ -10431,7 +10372,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (document.getElementById('hv-stats-receipt')) document.getElementById('hv-stats-receipt').onclick = ()=> openReceiptStatsModal();
     if (document.getElementById('hv-bulk-plan')) document.getElementById('hv-bulk-plan').onclick = ()=> openBulkPlanModal(content);
     bindHvMauLibrary(content, { allowManage: true });
-    if (isFullAccessRole(state.adminRole)) bindMauSourceCatalog(content);
     document.getElementById('hv-export-word').onclick = ()=>{
       const list = getFilteredList();
       if (!list.length){ alert('Không có dữ liệu để xuất.'); return; }
@@ -10629,6 +10569,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div class="field"><label>Số hợp đồng thực hành</label><input id="hv-soHopDong" value="${v.soHopDongTH||''}" placeholder="VD: 25/HĐTH-BVĐKT" /></div>
         <div class="field"><label>Ngày ký hợp đồng</label><input id="hv-ngayKyHopDong" type="date" value="${v.ngayKyHopDongTH||''}" /></div>
       </div>
+      <div class="row-flex" style="margin-top:-4px;margin-bottom:8px">
+        <button type="button" class="secondary" id="hv-xuat-hopdong">📝 Xuất Hợp đồng thực hành (Word, đã điền)</button>
+      </div>
       <div class="row-flex">
         <div class="field">
           <label>Đã đóng phí thực hành tại P.TCKT?</label>
@@ -10678,6 +10621,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       hvMucDichQuick.onchange = (e)=>{ if (e.target.value) overlay.querySelector('#hv-mucDich').value = e.target.value; };
     }
     overlay.querySelector('#hv-cancel').onclick = ()=> overlay.remove();
+    const hvXuatHopDongBtn = overlay.querySelector('#hv-xuat-hopdong');
+    if (hvXuatHopDongBtn) hvXuatHopDongBtn.onclick = ()=> exportHopDongThucHanhFilled(t);
     bindNameUppercase(overlay.querySelector('#hv-hoTen'));
     bindDigitsOnly(overlay.querySelector('#hv-cccd'));
     function recalcDenNgayTuSoThang(){
