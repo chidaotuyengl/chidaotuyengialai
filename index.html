@@ -8738,24 +8738,29 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <p class="muted" style="margin-top:-6px">Tick chọn các mục cần hủy rồi bấm "Mở lại hàng loạt" ở dưới — hồ sơ sẽ quay về trạng thái "Chờ phân công", khoa dùng lại đúng link cũ để chọn/ký lại. <b>Lưu ý:</b> nếu Quyết định/Phụ lục đã trình ký Giám đốc dựa trên dữ liệu cũ, cần rà soát lại các văn bản đó sau khi mở lại.</p>
         <p class="muted" style="margin-top:2px">🔒 Khoá 1 mục = chốt cứng, khoa/phòng KHÔNG tự huỷ/phân lại được nữa trên màn hình của khoa (chỉ Phòng CĐT mở khoá được ở đây). Dùng khi Quyết định/Phụ lục đã trình ký chính thức, tránh khoa tự đổi người hướng dẫn sau đó.</p>
         ${!doneList.length ? '<p class="muted">Hiện chưa có học viên nào ở trạng thái "Đã phân công".</p>' : (function(){
-          // Nhóm theo khoa + đếm "đã khoá / tổng" từng khoa, đồng thời tính số khoa TOÀN VIỆN hiện
-          // chưa có bất kỳ hoạt động nào (không có ai đang chờ, cũng không có ai đã phân công) —
-          // để CĐT biết ngay còn khoa nào chưa động tĩnh gì mà đôn đốc, không phải dò thủ công.
+          // Đếm theo đúng ý: "Số khoa đã phân XONG HẲN (không còn ai chờ phân công) / Tổng số khoa
+          // đang có học viên trong đợt tiếp nhận này" — chỉ tính trên các khoa THỰC SỰ có học viên
+          // (chờ hoặc đã xong), không tính cả các khoa/phòng không nhận học viên trong danh mục toàn viện.
           const khoaCoHoatDong = new Set([...khoaIds, ...doneList.map(x=>x.r.khoaId).filter(Boolean)]);
-          const tongSoKhoa = (state.config.units||[]).length;
-          const soKhoaChuaPhan = Math.max(0, tongSoKhoa - khoaCoHoatDong.size);
+          const tongSoKhoaDotNay = khoaCoHoatDong.size;
+          const soKhoaHoanThanh = tongSoKhoaDotNay - khoaIds.length;
+          const khoaChuaHoanThanhList = khoaIds.map(kid=>groups[kid].khoaTen).sort((a,b)=>(a||'').localeCompare(b||'','vi'));
           const rowsHtml = [];
-          let curKhoa = null, curLocked = 0, curTotal = 0;
+          let curKhoa = null, curLocked = 0, curTotal = 0, groupIdx = -1;
           const khoaTotals = {};
           doneList.forEach(({r})=>{ const k=r.khoaTen||'(Chưa rõ khoa)'; khoaTotals[k] = khoaTotals[k]||{locked:0,total:0}; khoaTotals[k].total++; if (r.daChot) khoaTotals[k].locked++; });
+          if (!state._doneKhoaCollapsed) state._doneKhoaCollapsed = {};
           doneList.forEach(({t,r})=>{
             const kTen = r.khoaTen||'(Chưa rõ khoa)';
             if (kTen !== curKhoa){
               curKhoa = kTen;
+              groupIdx++;
               const stat = khoaTotals[kTen];
-              rowsHtml.push('<tr style="background:#eef3ee"><td colspan="8" style="font-weight:bold;color:#1e7a34">🏥 '+kTen+' — <span style="' + (stat.locked<stat.total?'color:#b3261e':'color:#1e7a34') + '">'+stat.locked+'/'+stat.total+' đã khoá</span></td></tr>');
+              const isCollapsed = !!state._doneKhoaCollapsed[kTen];
+              rowsHtml.push('<tr style="background:#eef3ee;cursor:pointer" data-done-group-toggle="'+encodeURIComponent(kTen)+'" title="Bấm để '+(isCollapsed?'mở rộng':'thu gọn')+'"><td colspan="8" style="font-weight:bold;color:#1e7a34">'+(isCollapsed?'▶':'▼')+' 🏥 '+kTen+' — <span style="' + (stat.locked<stat.total?'color:#b3261e':'color:#1e7a34') + '">'+stat.locked+'/'+stat.total+' đã khoá</span></td></tr>');
             }
-            rowsHtml.push('<tr data-done-row-khoa="'+(r.khoaId||'')+'">' +
+            const isCollapsedNow = !!state._doneKhoaCollapsed[kTen];
+            rowsHtml.push('<tr data-done-row-khoa="'+(r.khoaId||'')+'" data-done-row-group="'+encodeURIComponent(kTen)+'" '+(isCollapsedNow?'style="display:none"':'')+'>' +
               '<td style="text-align:center"><input type="checkbox" data-done-check="'+t.id+'::'+r.id+'" style="width:auto;padding:0;margin:0" '+(r.daChot?'disabled title="Đã khoá — mở khoá trước khi chọn để mở lại"':'')+'></td>' +
               '<td>'+(t.hoTen||'')+'</td>' +
               '<td>'+(r.khoaTen||'')+'</td>' +
@@ -8767,7 +8772,10 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             '</tr>');
           });
           return `
-        <p style="margin:0 0 8px">${soKhoaChuaPhan>0 ? '<span style="background:#fdecea;border:1px solid #f0b8b0;border-radius:6px;padding:4px 10px;color:#b3261e;font-weight:600">⚠ '+soKhoaChuaPhan+' / '+tongSoKhoa+' khoa/phòng hiện CHƯA có hoạt động phân công nào (chưa chờ, chưa xong)</span>' : '<span style="color:#1e7a34;font-weight:600">✅ Tất cả '+tongSoKhoa+' khoa/phòng đều đã có ít nhất 1 hoạt động phân công.</span>'}</p>
+        <p style="margin:0 0 8px">${soKhoaHoanThanh<tongSoKhoaDotNay ? '<span style="background:#fdecea;border:1px solid #f0b8b0;border-radius:6px;padding:4px 10px;color:#b3261e;font-weight:600">⚠ '+soKhoaHoanThanh+' / '+tongSoKhoaDotNay+' khoa đã phân công XONG HẲN (còn '+(tongSoKhoaDotNay-soKhoaHoanThanh)+' khoa có ít nhất 1 học viên chưa được phân công)</span>' : '<span style="color:#1e7a34;font-weight:600">✅ '+soKhoaHoanThanh+' / '+tongSoKhoaDotNay+' khoa đã phân công XONG HẾT — không còn ai chờ phân công.</span>'}</p>
+        ${khoaChuaHoanThanhList.length ? `<details style="margin:0 0 10px"><summary style="cursor:pointer;color:#b3261e;font-size:12.5px">📋 Xem tên ${khoaChuaHoanThanhList.length} khoa còn học viên chưa phân công (bấm để mở)</summary>
+          <p class="muted" style="margin-top:6px;font-size:12.5px">${khoaChuaHoanThanhList.map(n=>n||'(không rõ tên)').join(' · ')}</p>
+        </details>` : ''}
         <div class="row-flex" style="gap:10px;margin-bottom:8px;flex-wrap:wrap;align-items:flex-end">
           <div class="field" style="min-width:240px;margin:0">
             <label style="font-size:12.5px">🔒 Khoá nhanh cả 1 khoa</label>
@@ -8779,6 +8787,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <button type="button" class="ghost small-btn" id="done-check-all">☑ Chọn tất cả</button>
           <button type="button" class="ghost small-btn" id="done-check-none">☐ Bỏ chọn hết</button>
           <span class="muted" id="done-count-sel" style="align-self:center">0 mục đã chọn</span>
+          <span style="flex:1"></span>
+          <button type="button" class="ghost small-btn" id="done-collapse-all">▶ Thu gọn tất cả khoa</button>
+          <button type="button" class="ghost small-btn" id="done-expand-all">▼ Mở rộng tất cả khoa</button>
         </div>
         <table>
           <thead><tr><th style="width:32px"></th><th>Học viên</th><th>Khoa</th><th>Thời gian</th><th>Người hướng dẫn</th><th>Người ký</th><th>Ngày ký</th><th style="width:90px">Khoá</th></tr></thead>
@@ -9213,6 +9224,25 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const count = await khoaHangLoat(selected, true);
       btnBatchLock.disabled = false; btnBatchLock.innerHTML = originalHtml2;
       showToast('✅ Đã khoá ' + count + ' mục.');
+      renderTraineeByKhoaView(content);
+    };
+    content.querySelectorAll('[data-done-group-toggle]').forEach(row=>{
+      row.onclick = ()=>{
+        const key = decodeURIComponent(row.getAttribute('data-done-group-toggle'));
+        state._doneKhoaCollapsed = state._doneKhoaCollapsed || {};
+        state._doneKhoaCollapsed[key] = !state._doneKhoaCollapsed[key];
+        renderTraineeByKhoaView(content);
+      };
+    });
+    const btnCollapseAll = content.querySelector('#done-collapse-all');
+    if (btnCollapseAll) btnCollapseAll.onclick = ()=>{
+      state._doneKhoaCollapsed = {};
+      doneList.forEach(({r})=>{ state._doneKhoaCollapsed[r.khoaTen||'(Chưa rõ khoa)'] = true; });
+      renderTraineeByKhoaView(content);
+    };
+    const btnExpandAll = content.querySelector('#done-expand-all');
+    if (btnExpandAll) btnExpandAll.onclick = ()=>{
+      state._doneKhoaCollapsed = {};
       renderTraineeByKhoaView(content);
     };
     content.querySelectorAll('[data-done-toggle-lock]').forEach(btn=>{
