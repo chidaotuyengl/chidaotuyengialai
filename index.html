@@ -1050,7 +1050,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       if (serverT){
         ['giaiDoan','deNghiPhanCongList'].forEach(key=>{
           if (Array.isArray(serverT[key]) && Array.isArray(clone[key])){
-            const naturalKey = (x)=> (x&&x.khoaId||'')+'::'+(x&&x.tuNgay||'');
+            // ⚠ SỬA LỖI: trước đây nhận diện "cùng 1 giai đoạn" bằng cặp khoaId+tuNgay — nên khi
+            // người dùng SỬA đúng "Từ ngày" hoặc đổi Khoa của 1 giai đoạn đã có, hệ thống hiểu
+            // NHẦM đó là giai đoạn hoàn toàn mới, rồi tự cộng lại bản CŨ (chưa sửa) từ máy chủ vào
+            // — khiến bản vừa sửa bị lẫn với bản cũ, nhìn như "sửa xong không lưu". Mỗi giai đoạn
+            // đã có sẵn "id" cố định không đổi (uid('gd')/uid('dnpc')) ngay từ lúc tạo — dùng đúng
+            // id này để nhận diện mới chính xác tuyệt đối, không phụ thuộc các trường có thể sửa.
+            const naturalKey = (x)=> (x && x.id) ? ('id::'+x.id) : ((x&&x.khoaId||'')+'::'+(x&&x.tuNgay||''));
             const seen = new Set(clone[key].map(naturalKey));
             const onlyOnServer = serverT[key].filter(x=> x && !seen.has(naturalKey(x)));
             if (onlyOnServer.length) clone[key] = clone[key].concat(onlyOnServer);
@@ -7187,6 +7193,141 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       render();
     };
   }
+  // ============ RÀ SOÁT DỮ LIỆU TRÙNG LẶP (do lỗi merge trước đây khi sửa Từ ngày/Khoa) ============
+  // Quét toàn bộ học viên, tìm các giai đoạn/đề nghị phân công NGHI TRÙNG NHAU trong cùng 1 khoa —
+  // dấu hiệu của lỗi merge cũ (đã vá): sửa "Từ ngày" hoặc đổi Khoa của 1 dòng đã lưu có thể vô tình
+  // làm sống lại bản CŨ (trước khi sửa) từ máy chủ, tạo ra 2 dòng cùng khoa dính sát/trùng ngày.
+  function scanDuplicateStages(){
+    const issues = [];
+    (state.trainees||[]).forEach(t=>{
+      [['giaiDoan','Giai đoạn đã phân công'],['deNghiPhanCongList','Đề nghị phân công (chờ khoa)']].forEach(([key,label])=>{
+        const rows = t[key];
+        if (!Array.isArray(rows) || rows.length<2) return;
+        // Nhóm theo khoaId
+        const byKhoa = {};
+        rows.forEach((r,idx)=>{ if(!r||!r.khoaId) return; (byKhoa[r.khoaId]=byKhoa[r.khoaId]||[]).push({r,idx}); });
+        Object.keys(byKhoa).forEach(khoaId=>{
+          const arr = byKhoa[khoaId];
+          if (arr.length<2) return;
+          arr.sort((a,b)=>(a.r.tuNgay||'').localeCompare(b.r.tuNgay||''));
+          for (let i=0;i<arr.length-1;i++){
+            const a = arr[i].r, b = arr[i+1].r;
+            // Trùng hệt ngày, hoặc 2 khoảng đè lên nhau (dấu hiệu lỗi merge dữ liệu cũ).
+            const overlap = (a.tuNgay||'') <= (b.denNgay||'9999-12-31') && (a.denNgay||'9999-12-31') >= (b.tuNgay||'');
+            const exactSame = a.tuNgay===b.tuNgay && a.denNgay===b.denNgay;
+            if (overlap || exactSame){
+              // Giai đoạn (giaiDoan) lưu tên khoa ở trường "khoa"; đề nghị phân công (deNghiPhanCongList)
+              // lưu ở trường "khoaTen" — 2 mảng đặt tên khác nhau, phải kiểm tra cả 2 mới ra đúng tên.
+              const khoaTenHienThi = a.khoa||a.khoaTen||b.khoa||b.khoaTen||'(không rõ tên khoa)';
+              issues.push({ traineeId:t.id, hoTen:t.hoTen, maHoSo:t.maHoSo, key, label, khoaTen: khoaTenHienThi, exactSame,
+                rowA:{ ...a, _idx:arr[i].idx }, rowB:{ ...b, _idx:arr[i+1].idx } });
+            }
+          }
+        });
+      });
+    });
+    return issues;
+  }
+  // Chấm điểm "độ đầy đủ" của 1 dòng để quyết định giữ bản nào khi xoá tự động cặp trùng y hệt —
+  // ưu tiên giữ bản có nhiều thông tin đã điền hơn (người hướng dẫn, kết quả, minh chứng...).
+  function stageRichnessScore(r){
+    let s = 0;
+    if (r.nguoiHuongDanId) s++;
+    if (r.ketQua && r.ketQua !== 'Chưa đánh giá') s++;
+    if (r.nhanXet) s++;
+    if (r.minhChungFile || r.minhChungLink) s++;
+    if (r.noiDung) s++;
+    if (r.trangThai && r.trangThai !== 'Chưa bắt đầu' && r.trangThai !== 'Chờ phân công') s++;
+    return s;
+  }
+  async function autoCleanExactDuplicates(){
+    const issues = scanDuplicateStages().filter(x=>x.exactSame);
+    if (!issues.length){ alert('Không có cặp nào trùng y hệt để tự xoá.'); return; }
+    if (!confirm('Sẽ tự động xoá '+issues.length+' dòng trùng y hệt (chỉ xoá đúng khi 2 dòng CÙNG khoa, CÙNG Từ ngày, CÙNG Đến ngày — giữ lại đúng 1 bản có nhiều thông tin hơn). Thao tác không hoàn tác được — tiếp tục?')) return;
+    // Gom theo học viên để chỉ lưu 1 lần/học viên (đỡ gọi mạng nhiều lần, tránh xung đột merge).
+    const byTrainee = {};
+    issues.forEach(x=>{ (byTrainee[x.traineeId]=byTrainee[x.traineeId]||[]).push(x); });
+    let removedTotal = 0;
+    for (const traineeId of Object.keys(byTrainee)){
+      const t = state.trainees.find(x=>x.id===traineeId);
+      if (!t) continue;
+      // Xoá theo index GIẢM DẦN trong từng mảng để không bị lệch chỉ số khi splice nhiều lần.
+      const toRemove = { giaiDoan: [], deNghiPhanCongList: [] };
+      byTrainee[traineeId].forEach(x=>{
+        const scoreA = stageRichnessScore(x.rowA), scoreB = stageRichnessScore(x.rowB);
+        const removeIdx = scoreA >= scoreB ? x.rowB._idx : x.rowA._idx; // giữ bản điểm cao hơn, xoá bản còn lại
+        toRemove[x.key].push(removeIdx);
+      });
+      ['giaiDoan','deNghiPhanCongList'].forEach(key=>{
+        const idxs = Array.from(new Set(toRemove[key])).sort((a,b)=>b-a);
+        idxs.forEach(idx=>{ if (Array.isArray(t[key]) && t[key][idx]){ t[key].splice(idx,1); removedTotal++; } });
+      });
+      recomputeTraineeOverallStatus(t);
+      await saveTrainee(t);
+    }
+    showToast('Đã tự động xoá '+removedTotal+' dòng trùng y hệt, giữ lại bản đầy đủ hơn.');
+    render();
+  }
+  function renderDuplicateAuditHtml(){
+    if (state._dupAuditOpen === undefined) state._dupAuditOpen = false;
+    const issues = state._dupAuditOpen ? scanDuplicateStages() : [];
+    const exactCount = issues.filter(x=>x.exactSame).length;
+    return `<details class="card" id="dup-audit-details" ${state._dupAuditOpen?'open':''} style="margin-top:16px">
+      <summary style="cursor:pointer;font-size:14px;font-weight:bold;list-style:none">🔍 Rà soát dữ liệu trùng lặp <span class="muted" style="font-weight:normal">(${issues.length} kết quả — bấm để ${state._dupAuditOpen?'thu gọn':'quét ngay'})</span></summary>
+      <p class="muted" style="margin-top:8px">Quét toàn bộ học viên, tìm các dòng <b>cùng 1 khoa</b> bị trùng ngày hoặc đè lên nhau trong cùng "Giai đoạn đã phân công" / "Đề nghị phân công" — dấu hiệu của lỗi merge dữ liệu cũ (đã vá) khi sửa Từ ngày/Khoa của 1 dòng đã lưu, hoặc khi áp dụng kế hoạch hàng loạt. Cặp <b>trùng Y HỆT</b> (cùng khoa, cùng ngày) chắc chắn là dữ liệu thừa — có thể xoá hàng loạt an toàn. Cặp chỉ <i>đè ngày lên nhau</i> (không y hệt) cần tự xem lại trước khi xoá.</p>
+      ${state._dupAuditOpen && exactCount ? `<div class="row-flex" style="margin-bottom:10px">
+        <button type="button" id="dup-auto-clean" style="background:#b3261e">🧹 Tự động xoá ${exactCount} cặp trùng Y HỆT (giữ bản đầy đủ hơn)</button>
+      </div>` : ''}
+      ${!state._dupAuditOpen ? '' : (issues.length ? `
+      <div class="scroll-table-wrap" style="max-height:60vh;overflow-y:auto;overflow-x:auto">
+      <table>
+        <thead><tr><th>Học viên</th><th>Loại</th><th>Khoa</th><th>Dòng A</th><th>Dòng B</th><th style="width:70px">Trùng y hệt?</th><th style="width:170px"></th></tr></thead>
+        <tbody>${issues.map((x,i)=>`
+          <tr>
+            <td>${x.hoTen||''}<br><span class="muted" style="font-size:11px">${x.maHoSo||''}</span></td>
+            <td style="font-size:12px">${x.label}</td>
+            <td>${x.khoaTen}</td>
+            <td style="font-size:12px">${fmtDate(x.rowA.tuNgay)}–${fmtDate(x.rowA.denNgay)}<br><span class="muted">${x.rowA.trangThai||x.rowA.nguoiHuongDan||''}</span></td>
+            <td style="font-size:12px">${fmtDate(x.rowB.tuNgay)}–${fmtDate(x.rowB.denNgay)}<br><span class="muted">${x.rowB.trangThai||x.rowB.nguoiHuongDan||''}</span></td>
+            <td style="text-align:center">${x.exactSame ? '✅' : '—'}</td>
+            <td style="white-space:nowrap">
+              <button type="button" class="ghost small-btn" data-dup-goto="${x.traineeId}">↗ Xem hồ sơ</button>
+              <button type="button" class="ghost small-btn" data-dup-del="${i}" data-dup-trainee="${x.traineeId}" data-dup-key="${x.key}" data-dup-idx="${x.rowA._idx}" title="Xoá dòng A">🗑️ Xoá A</button>
+              <button type="button" class="ghost small-btn" data-dup-del="${i}" data-dup-trainee="${x.traineeId}" data-dup-key="${x.key}" data-dup-idx="${x.rowB._idx}" title="Xoá dòng B">🗑️ Xoá B</button>
+            </td>
+          </tr>`).join('')}</tbody>
+      </table>
+      </div>` : '<p style="color:#1e7a34;font-weight:600">✅ Không phát hiện dòng nào nghi trùng lặp.</p>')}
+    </details>`;
+  }
+  function bindDuplicateAudit(container){
+    const details = container.querySelector('#dup-audit-details');
+    if (details) details.ontoggle = ()=>{ state._dupAuditOpen = details.open; render(); };
+    const autoCleanBtn = container.querySelector('#dup-auto-clean');
+    if (autoCleanBtn) autoCleanBtn.onclick = autoCleanExactDuplicates;
+    container.querySelectorAll('[data-dup-goto]').forEach(btn=>{
+      btn.onclick = ()=>{
+        const t = state.trainees.find(x=>x.id===btn.getAttribute('data-dup-goto'));
+        if (t) setUrlPath('hocvien/phan-khoa/' + slugName(t.hoTen));
+      };
+    });
+    container.querySelectorAll('[data-dup-del]').forEach(btn=>{
+      btn.onclick = async ()=>{
+        const traineeId = btn.getAttribute('data-dup-trainee');
+        const key = btn.getAttribute('data-dup-key');
+        const idx = Number(btn.getAttribute('data-dup-idx'));
+        const t = state.trainees.find(x=>x.id===traineeId);
+        if (!t || !Array.isArray(t[key]) || !t[key][idx]) { alert('Không tìm thấy dòng này (có thể đã bị xoá/sửa ở chỗ khác) — bấm quét lại.'); return; }
+        const row = t[key][idx];
+        if (!confirm('Xoá dòng: '+(row.khoaTen||'')+' — '+fmtDate(row.tuNgay)+' đến '+fmtDate(row.denNgay)+' của học viên "'+t.hoTen+'"?\n\nThao tác này không hoàn tác được — chỉ xoá khi chắc chắn đây là dòng trùng thừa.')) return;
+        t[key].splice(idx,1);
+        recomputeTraineeOverallStatus(t);
+        await saveTrainee(t);
+        showToast('Đã xoá dòng trùng.');
+        render();
+      };
+    });
+  }
   function renderHvMauLibraryHtml(opts){
     opts = opts || {};
     const hidden = state.hiddenBuiltinMau || [];
@@ -10329,6 +10470,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <div id="hv-table-wrap"></div>
       </div>
       ${renderHvMauLibraryHtml({ allowManage: !isReadOnlyRole(state.adminRole) })}
+      ${isFullAccessRole(state.adminRole) ? renderDuplicateAuditHtml() : ''}
     `;
     function getFilteredList(){
       const q = (fv.q||'').trim().toLowerCase();
@@ -10484,6 +10626,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (document.getElementById('hv-stats-receipt')) document.getElementById('hv-stats-receipt').onclick = ()=> openReceiptStatsModal();
     if (document.getElementById('hv-bulk-plan')) document.getElementById('hv-bulk-plan').onclick = ()=> openBulkPlanModal(content);
     bindHvMauLibrary(content, { allowManage: true });
+    if (isFullAccessRole(state.adminRole)) bindDuplicateAudit(content);
     document.getElementById('hv-export-word').onclick = ()=>{
       const list = getFilteredList();
       if (!list.length){ alert('Không có dữ liệu để xuất.'); return; }
