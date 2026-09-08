@@ -975,28 +975,37 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // ngắn trong hồ sơ chính. Khi tải lại hồ sơ, mã tham chiếu tự động được "giải mã" lại thành
   // đúng ảnh gốc — toàn bộ phần code còn lại (hiển thị, xuất Word...) không cần sửa gì cả.
   const BLOB_REF_PREFIX = '@@BLOBREF:';
-  const BLOB_OFFLOAD_THRESHOLD = 250000; // ~250KB mỗi chuỗi — đủ nhỏ để nhiều ảnh cộng lại vẫn an toàn dưới 1MB
-  async function offloadLargeBlobs(node, traineeId){
+  const BLOB_OFFLOAD_THRESHOLD = 250000; // ~250KB mỗi chuỗi — đủ nhỏ để 1 ảnh không làm hồ sơ quá to
+  // ⚠ AN TOÀN VỚI HỒ SƠ NHIỀU FILE/NHIỀU TRANG: ngưỡng 250KB ở trên chỉ chặn được "1 file quá to",
+  // KHÔNG chặn được trường hợp học viên đính kèm NHIỀU file/nhiều trang mà mỗi file đều nhỏ hơn
+  // 250KB — cộng dồn nhiều file nhỏ như vậy vẫn có thể vượt giới hạn 1.048.487 byte/tài liệu của
+  // Firestore, gây đúng lỗi "The value of property 'value' is longer than 1048487 bytes" và MẤT
+  // thao tác vừa lưu. Vì vậy hàm này nhận thêm tham số "threshold" tuỳ chọn: khi gọi lại lần 2 với
+  // threshold = 0, nó sẽ tách HẾT mọi chuỗi base64 còn lại, bất kể kích thước, để xử lý đúng
+  // trường hợp "nhiều file nhỏ cộng dồn" này (xem saveTrainee bên dưới).
+  const FIRESTORE_SAFE_LIMIT = 900000; // để dư ~150KB an toàn dưới giới hạn 1.048.487 byte của Firestore
+  async function offloadLargeBlobs(node, traineeId, threshold){
+    threshold = (typeof threshold === 'number') ? threshold : BLOB_OFFLOAD_THRESHOLD;
     if (Array.isArray(node)){
       for (let i=0;i<node.length;i++){
         const v = node[i];
-        if (typeof v === 'string' && v.indexOf('data:') === 0 && v.length > BLOB_OFFLOAD_THRESHOLD){
+        if (typeof v === 'string' && v.indexOf('data:') === 0 && v.length > threshold){
           const blobId = uid('blob');
           await window.storage.set('trainee_blob:'+traineeId+':'+blobId, v, true);
           node[i] = BLOB_REF_PREFIX + blobId;
         } else if (v && typeof v === 'object'){
-          await offloadLargeBlobs(v, traineeId);
+          await offloadLargeBlobs(v, traineeId, threshold);
         }
       }
     } else if (node && typeof node === 'object'){
       for (const key of Object.keys(node)){
         const v = node[key];
-        if (typeof v === 'string' && v.indexOf('data:') === 0 && v.length > BLOB_OFFLOAD_THRESHOLD){
+        if (typeof v === 'string' && v.indexOf('data:') === 0 && v.length > threshold){
           const blobId = uid('blob');
           await window.storage.set('trainee_blob:'+traineeId+':'+blobId, v, true);
           node[key] = BLOB_REF_PREFIX + blobId;
         } else if (v && typeof v === 'object'){
-          await offloadLargeBlobs(v, traineeId);
+          await offloadLargeBlobs(v, traineeId, threshold);
         }
       }
     }
@@ -1064,6 +1073,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         });
       }
       await offloadLargeBlobs(clone, t.id);
+      // ⚠ SỬA LỖI "nhiều file/nhiều trang không lưu được": nếu hồ sơ vẫn còn quá lớn sau khi đã
+      // tách các file to (>250KB) — thường do NHIỀU file nhỏ đính kèm cộng dồn lại — tách tiếp
+      // TOÀN BỘ chuỗi base64 còn lại (threshold = 0), không phân biệt to nhỏ, cho tới khi hồ sơ
+      // chính đủ nhỏ để Firestore chấp nhận lưu.
+      let approxSize = JSON.stringify(clone).length;
+      if (approxSize > FIRESTORE_SAFE_LIMIT){
+        await offloadLargeBlobs(clone, t.id, 0);
+        approxSize = JSON.stringify(clone).length;
+      }
+      if (approxSize > FIRESTORE_SAFE_LIMIT){
+        // Trường hợp hiếm gặp: hồ sơ vẫn quá lớn dù đã tách hết ảnh/file — báo rõ cho người dùng
+        // thay vì để Firestore âm thầm từ chối và làm mất thao tác vừa lưu.
+        alert('⚠ Hồ sơ "'+(t.hoTen||'')+'" vẫn quá lớn ngay cả sau khi đã tách toàn bộ ảnh/file đính kèm. Vui lòng kiểm tra lại số lượng file/ghi chú trong hồ sơ này, hoặc liên hệ hỗ trợ kỹ thuật.');
+      }
       const res = await window.storage.set('trainees:'+t.id, JSON.stringify(clone), true);
       if (!res){
         alert('⚠ Lưu hồ sơ "'+(t.hoTen||'')+'" không thành công (không có phản hồi từ máy chủ). Vui lòng thử lại sau vài giây — thao tác vừa rồi CHƯA được lưu.');
