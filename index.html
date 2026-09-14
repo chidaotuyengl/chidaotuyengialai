@@ -568,6 +568,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   };
 
   function uid(prefix){ return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+  // "Số phiếu" hiển thị cho người dùng — lấy từ mã nội bộ (id) của từng hoạt động CNKT, KHÔNG phải
+  // 1 bộ đếm riêng, nên không lo trùng số dù nhiều khoa/phòng cùng nhập lúc cùng thời điểm. Dùng để
+  // đối chiếu chính xác trước khi Sửa/Xoá/Huỷ, tránh bấm nhầm dòng khi có nhiều hoạt động gần giống
+  // nhau (VD: cùng nhân viên, cùng "Hội nghị, hội thảo khoa học").
+  function soPhieuOf(p){ return p && p.id ? p.id.slice(-6).toUpperCase() : '—'; }
   // ---- Cập nhật "đường dẫn" hiển thị trên thanh địa chỉ (dạng #...) để dễ báo lỗi ----
   // Khi anh gặp lỗi ở đâu, chỉ cần chụp thanh địa chỉ trình duyệt kèm ảnh màn hình — dòng chữ
   // sau dấu # cho biết chính xác đang ở màn/mục nào, khỏi phải mô tả bằng lời.
@@ -3530,17 +3535,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const tongGio = mine.reduce((s,p)=> s+(parseFloat(p.soGioTinChi)||0), 0);
     wrap.innerHTML = `
       <table>
-        <thead><tr><th>Nhân viên</th><th>Hoạt động</th><th>Hình thức</th><th>Vai trò</th><th>Đơn vị tổ chức</th><th>Từ ngày - Đến ngày</th><th>Giờ tín chỉ</th><th>Số chứng nhận CME</th><th>Bằng chứng</th><th>Ngày xác nhận</th><th></th></tr></thead>
+        <thead><tr><th>Số phiếu</th><th>Nhân viên</th><th>Hoạt động</th><th>Hình thức</th><th>Vai trò</th><th>Đơn vị tổ chức</th><th>Từ ngày - Đến ngày</th><th>Giờ tín chỉ</th><th>Số chứng nhận CME</th><th>Bằng chứng</th><th>Ngày xác nhận</th><th></th></tr></thead>
         <tbody>${mine.map(p=>`
           <tr>
-            <td>${p.empName}</td><td>${p.tenHoatDong}</td><td>${p.loaiHinh}</td><td>${p.vaiTro||'—'}</td><td>${p.donViToChuc||'—'}</td><td>${fmtDateRange(p.ngayThamGia, p.ngayKetThuc)}</td><td>${p.soGioTinChi}</td>
+            <td class="muted" style="font-family:monospace">${soPhieuOf(p)}</td><td>${p.empName}</td><td>${p.tenHoatDong}</td><td>${p.loaiHinh}</td><td>${p.vaiTro||'—'}</td><td>${p.donViToChuc||'—'}</td><td>${fmtDateRange(p.ngayThamGia, p.ngayKetThuc)}</td><td>${p.soGioTinChi}</td>
             <td>${p.soChungNhanCME||'—'}</td>
             <td>${evidenceButtonHtml(p, `data-view-unit-approved-file="${p.id}"`)}</td>
             <td>${fmtDate(p.confirmedAt)}</td>
             <td><button class="ghost small-btn" data-view-unit-book="${p.empId}">📖 Sổ</button></td>
           </tr>
         `).join('')}
-        <tr><td colspan="6" style="text-align:right;font-weight:bold">Tổng cộng</td><td style="font-weight:bold">${tongGio.toFixed(1)} giờ</td><td></td><td></td><td></td><td></td></tr>
+        <tr><td colspan="7" style="text-align:right;font-weight:bold">Tổng cộng</td><td style="font-weight:bold">${tongGio.toFixed(1)} giờ</td><td></td><td></td><td></td><td></td></tr>
         </tbody>
       </table>
     `;
@@ -3564,16 +3569,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const tongGio = mine.reduce((s,p)=> s+(parseFloat(p.soGioTinChi)||0), 0);
     wrap.innerHTML = `
       <table>
-        <thead><tr><th>Nhân viên</th><th>Hoạt động</th><th>Hình thức</th><th>Vai trò</th><th>Đơn vị tổ chức</th><th>Từ ngày - Đến ngày</th><th>Giờ tín chỉ</th><th>Số chứng nhận CME</th><th>Bằng chứng</th><th>Ngày từ chối</th><th>Lý do</th></tr></thead>
+        <thead><tr><th>Số phiếu</th><th>Nhân viên</th><th>Hoạt động</th><th>Hình thức</th><th>Vai trò</th><th>Đơn vị tổ chức</th><th>Từ ngày - Đến ngày</th><th>Giờ tín chỉ</th><th>Số chứng nhận CME</th><th>Bằng chứng</th><th>Ngày từ chối</th><th>Lý do</th></tr></thead>
         <tbody>${mine.map(p=>`
           <tr>
-            <td>${p.empName}</td><td>${p.tenHoatDong}</td><td>${p.loaiHinh}</td><td>${p.vaiTro||'—'}</td><td>${p.donViToChuc||'—'}</td><td>${fmtDateRange(p.ngayThamGia, p.ngayKetThuc)}</td><td>${p.soGioTinChi}</td>
+            <td class="muted" style="font-family:monospace">${soPhieuOf(p)}</td><td>${p.empName}</td><td>${p.tenHoatDong}</td><td>${p.loaiHinh}</td><td>${p.vaiTro||'—'}</td><td>${p.donViToChuc||'—'}</td><td>${fmtDateRange(p.ngayThamGia, p.ngayKetThuc)}</td><td>${p.soGioTinChi}</td>
             <td>${p.soChungNhanCME||'—'}</td>
             <td>${evidenceButtonHtml(p, `data-view-unit-rejected-file="${p.id}"`)}</td>
             <td>${fmtDate(p.rejectedAt)}</td><td style="font-size:12px">${p.lyDo||'—'}</td>
           </tr>
         `).join('')}
-        <tr><td colspan="6" style="text-align:right;font-weight:bold">Tổng cộng (không tính vào giờ CNKT)</td><td style="font-weight:bold">${tongGio.toFixed(1)} giờ</td><td></td><td></td><td></td><td></td></tr>
+        <tr><td colspan="7" style="text-align:right;font-weight:bold">Tổng cộng (không tính vào giờ CNKT)</td><td style="font-weight:bold">${tongGio.toFixed(1)} giờ</td><td></td><td></td><td></td><td></td></tr>
         </tbody>
       </table>
     `;
@@ -3904,17 +3909,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const tongGio = mine.reduce((s,p)=> s+(parseFloat(p.soGioTinChi)||0), 0);
     wrap.innerHTML = `
       <table>
-        <thead><tr><th>Nhân viên</th><th>Hoạt động</th><th>Hình thức</th><th>Vai trò</th><th>Đơn vị tổ chức</th><th>Từ ngày - Đến ngày</th><th>Giờ tín chỉ</th><th>Số chứng nhận CME</th><th>Bằng chứng</th><th>Trạng thái</th><th></th></tr></thead>
+        <thead><tr><th>Số phiếu</th><th>Nhân viên</th><th>Hoạt động</th><th>Hình thức</th><th>Vai trò</th><th>Đơn vị tổ chức</th><th>Từ ngày - Đến ngày</th><th>Giờ tín chỉ</th><th>Số chứng nhận CME</th><th>Bằng chứng</th><th>Trạng thái</th><th></th></tr></thead>
         <tbody>${mine.map(p=>`
           <tr>
-            <td>${p.empName}</td><td>${p.tenHoatDong}</td><td>${p.loaiHinh}</td><td>${p.vaiTro||'—'}</td><td>${p.donViToChuc||'—'}</td><td>${fmtDateRange(p.ngayThamGia, p.ngayKetThuc)}</td><td>${p.soGioTinChi}</td>
+            <td class="muted" style="font-family:monospace">${soPhieuOf(p)}</td><td>${p.empName}</td><td>${p.tenHoatDong}</td><td>${p.loaiHinh}</td><td>${p.vaiTro||'—'}</td><td>${p.donViToChuc||'—'}</td><td>${fmtDateRange(p.ngayThamGia, p.ngayKetThuc)}</td><td>${p.soGioTinChi}</td>
             <td>${p.soChungNhanCME||'—'}</td>
             <td>${evidenceButtonHtml(p, `data-view-unit-pending-file="${p.id}"`)}</td>
             <td><span class="pill amber">Chờ duyệt</span></td>
             <td style="white-space:nowrap"><button class="ghost small-btn" data-edit-unit-pending="${p.id}">✏️ Sửa</button> <button class="ghost small-btn" data-del-unit-pending="${p.id}">🗑️ Xoá</button> <button class="ghost small-btn" data-view-unit-book="${p.empId}">📖 Sổ</button></td>
           </tr>
         `).join('')}
-        <tr><td colspan="6" style="text-align:right;font-weight:bold">Tổng cộng (chưa được duyệt)</td><td style="font-weight:bold">${tongGio.toFixed(1)} giờ</td><td></td><td></td><td></td><td></td></tr>
+        <tr><td colspan="7" style="text-align:right;font-weight:bold">Tổng cộng (chưa được duyệt)</td><td style="font-weight:bold">${tongGio.toFixed(1)} giờ</td><td></td><td></td><td></td><td></td></tr>
         </tbody>
       </table>
     `;
@@ -6396,17 +6401,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             </div>
             <div id="cnkt-autocheck-result"></div>
             <table>
-              <thead><tr><th>STT</th><th>Khoa/Phòng</th><th>Nhân viên</th><th>Hình thức</th><th>Vai trò</th><th>Đơn vị tổ chức</th><th>Hoạt động</th><th>Từ ngày - Đến ngày</th><th>Giờ</th><th>Số chứng nhận CME</th><th>Bằng chứng</th><th></th></tr></thead>
+              <thead><tr><th>STT</th><th>Số phiếu</th><th>Khoa/Phòng</th><th>Nhân viên</th><th>Hình thức</th><th>Vai trò</th><th>Đơn vị tổ chức</th><th>Hoạt động</th><th>Từ ngày - Đến ngày</th><th>Giờ</th><th>Số chứng nhận CME</th><th>Bằng chứng</th><th></th></tr></thead>
               <tbody>${list.map((p,i)=>`
                 <tr id="cnkt-row-${p.id}">
-                  <td style="text-align:center">${i+1}</td><td>${p.donViName}</td><td>${p.empName}</td><td>${p.loaiHinh}</td><td>${p.vaiTro||'—'}</td><td>${p.donViToChuc||'—'}</td><td>${p.tenHoatDong}</td>
+                  <td style="text-align:center">${i+1}</td><td class="muted" style="font-family:monospace">${soPhieuOf(p)}</td><td>${p.donViName}</td><td>${p.empName}</td><td>${p.loaiHinh}</td><td>${p.vaiTro||'—'}</td><td>${p.donViToChuc||'—'}</td><td>${p.tenHoatDong}</td>
                   <td>${fmtDateRange(p.ngayThamGia, p.ngayKetThuc)}</td><td>${p.soGioTinChi}</td>
                   <td>${p.soChungNhanCME||'—'}</td>
                   <td style="max-width:180px;font-size:12px">${p.bangChung||'—'}${evidenceFileHtml(p)}</td>
                   <td style="white-space:nowrap"><button class="small-btn" data-approve="${p.id}">✅ Xác nhận</button> <button class="ghost small-btn" data-reject="${p.id}">❌ Từ chối</button> <button class="ghost small-btn" data-edit-admin-pending="${p.id}">✏️ Sửa</button> <button class="ghost small-btn" data-view-admin-book="${p.empId}">📖 Sổ</button></td>
                 </tr>
               `).join('')}
-              <tr><td colspan="8" style="text-align:right;font-weight:bold">Tổng cộng (chưa được duyệt)</td><td style="font-weight:bold">${tongGioPending.toFixed(1)} giờ</td><td></td><td></td><td></td></tr>
+              <tr><td colspan="9" style="text-align:right;font-weight:bold">Tổng cộng (chưa được duyệt)</td><td style="font-weight:bold">${tongGioPending.toFixed(1)} giờ</td><td></td><td></td><td></td></tr>
               </tbody>
             </table>
           </div>
@@ -6503,16 +6508,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               <button class="secondary" id="btn-export-approved-excel">📊 Xuất Excel</button>
             </div>
             <table>
-              <thead><tr><th>Khoa/Phòng</th><th>Nhân viên</th><th>Hình thức</th><th>Vai trò</th><th>Đơn vị tổ chức</th><th>Hoạt động</th><th>Từ ngày - Đến ngày</th><th>Giờ</th><th>Số chứng nhận CME</th><th>Ngày xác nhận</th><th>Bằng chứng</th><th></th></tr></thead>
+              <thead><tr><th>Số phiếu</th><th>Khoa/Phòng</th><th>Nhân viên</th><th>Hình thức</th><th>Vai trò</th><th>Đơn vị tổ chức</th><th>Hoạt động</th><th>Từ ngày - Đến ngày</th><th>Giờ</th><th>Số chứng nhận CME</th><th>Ngày xác nhận</th><th>Bằng chứng</th><th></th></tr></thead>
               <tbody>${list.map(p=>`
                 <tr>
-                  <td>${p.donViName}</td><td>${p.empName}</td><td>${p.loaiHinh}</td><td>${p.vaiTro||'—'}</td><td>${p.donViToChuc||'—'}</td><td>${p.tenHoatDong}</td>
+                  <td class="muted" style="font-family:monospace">${soPhieuOf(p)}</td><td>${p.donViName}</td><td>${p.empName}</td><td>${p.loaiHinh}</td><td>${p.vaiTro||'—'}</td><td>${p.donViToChuc||'—'}</td><td>${p.tenHoatDong}</td>
                   <td>${fmtDateRange(p.ngayThamGia, p.ngayKetThuc)}</td><td>${p.soGioTinChi}</td><td>${p.soChungNhanCME||'—'}</td><td>${fmtDate(p.confirmedAt)}</td>
                   <td style="max-width:180px;font-size:12px">${p.bangChung||'—'}${evidenceFileHtml(p)}</td>
-                  <td style="white-space:nowrap"><button class="ghost small-btn" data-edit-approved="${p.id}">✏️ Sửa</button> <button class="ghost small-btn" data-view-admin-book="${p.empId}">📖 Sổ</button></td>
+                  <td style="white-space:nowrap"><button class="ghost small-btn" data-edit-approved="${p.id}">✏️ Sửa</button> <button class="ghost small-btn" data-void-approved="${p.id}">🗑️ Huỷ</button> <button class="ghost small-btn" data-view-admin-book="${p.empId}">📖 Sổ</button></td>
                 </tr>
               `).join('')}
-              <tr><td colspan="7" style="text-align:right;font-weight:bold">Tổng cộng</td><td style="font-weight:bold">${tongGioApproved.toFixed(1)} giờ</td><td></td><td></td><td></td><td></td></tr>
+              <tr><td colspan="8" style="text-align:right;font-weight:bold">Tổng cộng</td><td style="font-weight:bold">${tongGioApproved.toFixed(1)} giờ</td><td></td><td></td><td></td><td></td></tr>
               </tbody>
             </table>
           </div>
@@ -6543,6 +6548,28 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         wrap.querySelectorAll('[data-edit-approved]').forEach(b=>{
           b.onclick = ()=> openEditApprovedModal(b.getAttribute('data-edit-approved'), ()=> renderAdminApprove(content));
         });
+        // "Huỷ" một hoạt động ĐÃ DUYỆT: dùng cho trường hợp hoạt động là dữ liệu test/nhập nhầm cần
+        // gỡ khỏi giờ tín chỉ chính thức. KHÔNG xoá âm thầm — chuyển sang mục "Đã từ chối/huỷ" để giữ
+        // lại dấu vết, đồng thời trừ đúng khỏi kho hoạt động đã xác nhận (activities:empId) và làm
+        // mới cache giờ để tổng giờ tín chỉ của nhân viên cập nhật lại ngay.
+        wrap.querySelectorAll('[data-void-approved]').forEach(b=>{
+          b.onclick = ()=>{
+            const id = b.getAttribute('data-void-approved');
+            const p = state.approvedLog.find(x=>x.id===id);
+            if (!p) return;
+            openReasonModal('Huỷ hoạt động đã duyệt — Phiếu #'+soPhieuOf(p)+' — '+p.empName+' — "'+p.tenHoatDong+'"', 'Lý do huỷ (VD: dữ liệu test, nhập nhầm...)', async (reason)=>{
+              state.approvedLog = state.approvedLog.filter(x=>x.id!==id);
+              state.rejectedLog.unshift(Object.assign({}, p, { rejectedAt: todayISO(), lyDo: 'Huỷ bởi Admin: ' + reason }));
+              await saveApprovedLog();
+              await saveRejectedLog();
+              const acts = await getActivities(p.empId);
+              await saveActivities(p.empId, acts.filter(a=>a.id!==id));
+              invalidateHours(p.empId);
+              showToast('Đã huỷ hoạt động — chuyển sang mục "Đã từ chối/huỷ".');
+              renderAdminApprove(content);
+            });
+          };
+        });
       }
 
       if (view === 'rejected'){
@@ -6555,17 +6582,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               <button class="secondary" id="btn-export-rejected-excel">📊 Xuất Excel</button>
             </div>
             <table>
-              <thead><tr><th>Khoa/Phòng</th><th>Nhân viên</th><th>Hình thức</th><th>Vai trò</th><th>Đơn vị tổ chức</th><th>Hoạt động</th><th>Từ ngày - Đến ngày</th><th>Giờ</th><th>Số chứng nhận CME</th><th>Bằng chứng</th><th>Ngày từ chối</th><th>Lý do</th><th></th></tr></thead>
+              <thead><tr><th>Số phiếu</th><th>Khoa/Phòng</th><th>Nhân viên</th><th>Hình thức</th><th>Vai trò</th><th>Đơn vị tổ chức</th><th>Hoạt động</th><th>Từ ngày - Đến ngày</th><th>Giờ</th><th>Số chứng nhận CME</th><th>Bằng chứng</th><th>Ngày từ chối</th><th>Lý do</th><th></th></tr></thead>
               <tbody>${list.map(p=>`
                 <tr>
-                  <td>${p.donViName}</td><td>${p.empName}</td><td>${p.loaiHinh}</td><td>${p.vaiTro||'—'}</td><td>${p.donViToChuc||'—'}</td><td>${p.tenHoatDong}</td>
+                  <td class="muted" style="font-family:monospace">${soPhieuOf(p)}</td><td>${p.donViName}</td><td>${p.empName}</td><td>${p.loaiHinh}</td><td>${p.vaiTro||'—'}</td><td>${p.donViToChuc||'—'}</td><td>${p.tenHoatDong}</td>
                   <td>${fmtDateRange(p.ngayThamGia, p.ngayKetThuc)}</td><td>${p.soGioTinChi}</td><td>${p.soChungNhanCME||'—'}</td>
                   <td style="max-width:180px;font-size:12px">${p.bangChung||'—'}${evidenceFileHtml(p)}</td>
                   <td>${fmtDate(p.rejectedAt)}</td><td>${p.lyDo||'—'}</td>
                   <td><button class="ghost small-btn" data-view-admin-book="${p.empId}">📖 Sổ</button></td>
                 </tr>
               `).join('')}
-              <tr><td colspan="6" style="text-align:right;font-weight:bold">Tổng cộng (không tính vào giờ CNKT)</td><td style="font-weight:bold">${tongGioRejected.toFixed(1)} giờ</td><td></td><td></td><td></td><td></td><td></td></tr>
+              <tr><td colspan="7" style="text-align:right;font-weight:bold">Tổng cộng (không tính vào giờ CNKT)</td><td style="font-weight:bold">${tongGioRejected.toFixed(1)} giờ</td><td></td><td></td><td></td><td></td><td></td></tr>
               </tbody>
             </table>
           </div>
@@ -14485,12 +14512,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         </div>
         <div id="backup-status" class="muted" style="margin-top:8px"></div>
       </div>
-      <div class="card" style="border-color:var(--red)">
-        <h3 style="color:var(--red)">Xoá dữ liệu hiện tại & nạp lại dữ liệu chính thức</h3>
-        <p class="muted">Dùng khi máy/trình duyệt này đang có dữ liệu test cũ và anh muốn nạp lại đúng danh sách 1.417 nhân viên chính thức mới nhất (kèm Giới tính, Ngày sinh, Ngày cấp CCHN). <b>Toàn bộ nhân viên, đơn vị, hoạt động CNKT, lịch sử duyệt/từ chối hiện tại trên máy này sẽ bị xoá sạch</b> — nên Sao lưu trước nếu cần giữ lại.</p>
-        <button class="danger" id="btn-reset-reseed">🗑️ Xoá hết & nạp lại dữ liệu chính thức</button>
-        <div id="reset-status" class="muted" style="margin-top:8px"></div>
-      </div>
       <div class="card">
         <h3>Số học viên tối đa mỗi người hướng dẫn được nhận cùng lúc</h3>
         <p class="muted">Áp dụng cho toàn hệ thống — khi chọn người hướng dẫn ở bất kỳ đâu (Phân khoa, Đề nghị phân công của khoa, Lập kế hoạch phân bổ hàng loạt...), người đã đủ số này trong cùng khoảng thời gian sẽ không chọn được nữa (hiện "— Đã đủ"). Mặc định là 5.</p>
@@ -14503,15 +14524,54 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <h3>Quy định áp dụng</h3>
         <p class="muted">Hệ thống áp dụng quy định tại Thông tư 32/2023/TT-BYT: yêu cầu tối thiểu ${REQUIRED_HOURS} giờ tín chỉ trong chu kỳ ${CYCLE_YEARS} năm liên tục cho người hành nghề khám bệnh, chữa bệnh. Ngưỡng "Nguy cơ" được tính khi còn ≤ 6 tháng đến hạn chu kỳ mà chưa đạt đủ giờ; ngưỡng "Cần chú ý" khi tiến độ thực hiện chậm hơn 15% so với tiến độ tuyến tính kỳ vọng.</p>
       </div>
+      <details class="card" style="border-color:var(--red)">
+        <summary style="cursor:pointer;font-weight:bold;color:var(--red);font-size:15px">⚠ Tuỳ chọn nâng cao — rủi ro cao (bấm để hiện)</summary>
+        <p class="muted" style="margin-top:10px">Các thao tác dưới đây ảnh hưởng tới toàn bộ dữ liệu/cấu hình hệ thống, hiếm khi cần dùng trong vận hành thường ngày nên được ẩn mặc định để tránh bấm nhầm. Chỉ mở ra khi thực sự cần.</p>
+        <div class="card" style="border-color:var(--red);margin-top:14px">
+          <h3 style="color:var(--red)">⚠ Xoá dữ liệu hoạt động CNKT & đơn vị hiện tại, nạp lại dữ liệu chính thức</h3>
+          <p class="muted"><b style="color:var(--red)">Lưu ý quan trọng: dữ liệu hệ thống dùng CHUNG cho toàn viện trên Firebase — đây KHÔNG PHẢI thao tác chỉ ảnh hưởng riêng máy/trình duyệt đang mở.</b> Bấm nút này sẽ xoá vĩnh viễn toàn bộ lịch sử hoạt động CNKT (Chờ duyệt/Đã duyệt/Từ chối) và danh sách đơn vị của TẤT CẢ các khoa/phòng trong viện — kể cả dữ liệu thật đã ghi nhận, không chỉ dữ liệu test — rồi nạp lại danh sách 1.417 nhân viên chính thức. <b>Không thể hoàn tác.</b> Chỉ dùng khi thực sự chắc chắn cần làm lại từ đầu, và đã Sao lưu trước.</p>
+          <button class="danger" id="btn-reset-reseed">🗑️ Xoá hết & nạp lại dữ liệu chính thức</button>
+          <div id="reset-status" class="muted" style="margin-top:8px"></div>
+        </div>
+        <div class="card" style="margin-top:14px">
+          <h3>Kết nối dữ liệu (Firebase)</h3>
+          <p class="muted">Dữ liệu hệ thống đang lưu dùng chung trên Firebase. Nếu cần đổi sang một project Firebase khác (ví dụ chuyển từ project thử nghiệm sang project chính thức), bấm nút dưới đây — máy này sẽ quên cấu hình hiện tại và yêu cầu dán lại cấu hình mới ở lần mở tiếp theo. <b>Việc này chỉ ảnh hưởng tới máy/trình duyệt này</b>, không xoá dữ liệu trên Firebase.</p>
+          <button class="ghost" id="btn-change-firebase">🔧 Đổi cấu hình Firebase trên máy này</button>
+        </div>
+      </details>
       <div class="card">
-        <h3>Kết nối dữ liệu (Firebase)</h3>
-        <p class="muted">Dữ liệu hệ thống đang lưu dùng chung trên Firebase. Nếu cần đổi sang một project Firebase khác (ví dụ chuyển từ project thử nghiệm sang project chính thức), bấm nút dưới đây — máy này sẽ quên cấu hình hiện tại và yêu cầu dán lại cấu hình mới ở lần mở tiếp theo. <b>Việc này chỉ ảnh hưởng tới máy/trình duyệt này</b>, không xoá dữ liệu trên Firebase.</p>
-        <button class="ghost" id="btn-change-firebase">🔧 Đổi cấu hình Firebase trên máy này</button>
+        <h3>Rà soát & đồng bộ lại Khoa/Phòng cho hoạt động CNKT</h3>
+        <p class="muted">Dùng khi có tình trạng <b>Admin thấy được 1 hoạt động CNKT nhưng khoa/phòng lại không thấy</b> trong danh sách của mình. Nguyên nhân thường gặp: hoạt động đó đang lưu với mã Khoa/Phòng cũ (VD: khoa vừa được đổi tên/đổi mã), không còn khớp với mã Khoa/Phòng hiện tại của nhân viên — nên hệ thống lọc theo khoa (bên khoa dùng) không tìm thấy, còn Admin xem toàn viện nên vẫn thấy. Công cụ này quét toàn bộ hoạt động (Chờ duyệt/Đã duyệt/Từ chối) và tự sửa lại đúng Khoa/Phòng hiện tại của từng nhân viên.</p>
+        <button id="btn-sync-donvi">🔍 Rà soát ngay</button>
+        <div id="sync-donvi-status" class="muted" style="margin-top:8px"></div>
       </div>
     `;
     document.getElementById('btn-reset-reseed').onclick = async ()=>{
-      if (!confirm('XOÁ SẠCH toàn bộ dữ liệu hiện tại (nhân viên, đơn vị, hoạt động CNKT, lịch sử duyệt) và nạp lại 1.417 nhân viên chính thức? Hành động này không thể hoàn tác.')) return;
+      // Xác nhận 2 lớp cho thao tác KHÔNG THỂ HOÀN TÁC, ảnh hưởng dữ liệu CHUNG toàn viện: (1) gõ
+      // đúng cụm từ xác nhận (không phải chỉ bấm OK cho nhanh), (2) tự động tải file sao lưu trước
+      // khi xoá, để dù có bấm nhầm vẫn còn bản sao lưu vừa tạo để khôi phục lại.
+      const typed = prompt('Thao tác này sẽ XOÁ VĨNH VIỄN toàn bộ hoạt động CNKT và đơn vị của TOÀN VIỆN trên Firebase (không phải chỉ máy này), không thể hoàn tác.\n\nĐể xác nhận, gõ chính xác cụm từ: XOA HET DU LIEU');
+      if (typed !== 'XOA HET DU LIEU'){
+        if (typed !== null) alert('Cụm từ xác nhận không đúng — đã huỷ thao tác, không có gì bị xoá.');
+        return;
+      }
       const status = document.getElementById('reset-status');
+      status.textContent = 'Đang tự động sao lưu trước khi xoá…';
+      try {
+        const activities = {};
+        for (let i=0; i<state.employees.length; i++){
+          const emp = state.employees[i];
+          const acts = await getActivities(emp.id);
+          if (acts.length) activities[emp.id] = acts;
+        }
+        const backup = { version: 1, exportedAt: new Date().toISOString(), config: state.config, employees: state.employees, pending: state.pending, activities };
+        const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'sao_luu_TRUOC_KHI_XOA_' + todayISO() + '.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+      } catch(e){ /* nếu sao lưu tự động lỗi vẫn tiếp tục, nhưng đã cảnh báo rõ ở bước gõ xác nhận */ }
       status.textContent = 'Đang xoá dữ liệu cũ…';
       await Promise.all(state.employees.map(emp => window.storage.delete('activities:'+emp.id, true).catch(()=>{})));
       state.employees = [];
@@ -14601,8 +14661,47 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         status.textContent = 'Lỗi: ' + err.message;
       }
     };
+    document.getElementById('btn-sync-donvi').onclick = async ()=>{
+      const status = document.getElementById('sync-donvi-status');
+      status.textContent = 'Đang rà soát…';
+      const empById = {};
+      state.employees.forEach(e=>{ empById[e.id] = e; });
+      const unitNameById = {};
+      (state.config.units||[]).forEach(u=>{ unitNameById[u.id] = u.name; });
+      // Với mỗi tập (Chờ duyệt/Đã duyệt/Từ chối): nếu donViId của hoạt động KHÔNG khớp với donViId
+      // HIỆN TẠI của nhân viên đó (thường do khoa vừa được đổi tên/tạo lại mã), sửa lại cho khớp —
+      // đây chính là nguyên nhân "Admin thấy nhưng khoa/phòng không thấy", vì màn của khoa lọc chặt
+      // theo đúng donViId hiện tại còn Admin xem toàn viện nên không bị ảnh hưởng.
+      function syncList(list){
+        let fixed = 0;
+        list.forEach(p=>{
+          const emp = empById[p.empId];
+          if (!emp) return; // nhân viên không còn tồn tại — bỏ qua, không đoán mò
+          if (emp.donViId && p.donViId !== emp.donViId){
+            p.donViId = emp.donViId;
+            p.donViName = unitNameById[emp.donViId] || emp.donViName || p.donViName;
+            fixed++;
+          }
+        });
+        return fixed;
+      }
+      const f1 = syncList(state.pending);
+      const f2 = syncList(state.approvedLog);
+      const f3 = syncList(state.rejectedLog);
+      const tong = f1 + f2 + f3;
+      if (!tong){
+        status.textContent = 'Đã rà soát xong — không phát hiện hoạt động nào bị lệch Khoa/Phòng.';
+        showToast('Không có gì cần sửa — dữ liệu đã đồng bộ đúng.');
+        return;
+      }
+      status.textContent = 'Phát hiện ' + tong + ' hoạt động bị lệch — đang lưu lại…';
+      await savePending();
+      await saveApprovedLog();
+      await saveRejectedLog();
+      status.textContent = 'Đã sửa xong ' + tong + ' hoạt động (Chờ duyệt: ' + f1 + ', Đã duyệt: ' + f2 + ', Từ chối: ' + f3 + ').';
+      showToast('Đã đồng bộ lại Khoa/Phòng cho ' + tong + ' hoạt động CNKT.');
+    };
   }
-
 
   async function seedDemoData(){
     if (state.config.seeded || state.employees.length) return;
