@@ -2363,7 +2363,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const rows = xong.map(({t,r},i)=>{
         const emp = state.employees.find(e=>e.id===r.nguoiHuongDanId);
         const soThang = (r.soThang!=null && r.soThang!=='') ? parseFloat(r.soThang) : monthsDecimal(r.tuNgay, r.denNgay);
-        return [i+1, t.hoTen||'', fmtDate(r.tuNgay), fmtDate(r.denNgay), isNaN(soThang)?'':soThang.toFixed(1), r.nguoiHuongDan||'', emp&&emp.soCCHN?emp.soCCHN:'', emp&&emp.ngayCapCCHN?fmtDate(emp.ngayCapCCHN):''];
+        return [i+1, t.hoTen||'', fmtDate(r.tuNgay), fmtDate(r.denNgay), isNaN(soThang)?'':soThang.toFixed(1), r.nguoiHuongDan||'', thongTinCCHNHuongDan(r).soCCHN, thongTinCCHNHuongDan(r).ngayCap];
       });
       const tenFile = 'bang_tong_hop_phan_cong_' + (state.unitName||'khoa').replace(/\s+/g,'_') +
         (dnpcXongLoc.tu||dnpcXongLoc.den ? '_' + (dnpcXongLoc.tu||'...') + '_den_' + (dnpcXongLoc.den||'...') : '') +
@@ -2378,8 +2378,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         '<td style="text-align:center">'+fmtDate(r.tuNgay)+' – '+fmtDate(r.denNgay)+'</td>' +
         '<td style="text-align:center">'+((r.soThang!=null && r.soThang!=='') ? parseFloat(r.soThang) : monthsDecimal(r.tuNgay,r.denNgay)).toFixed(1)+'</td>' +
         '<td>'+(r.nguoiHuongDan||'')+'</td>' +
-        '<td style="text-align:center">'+(emp&&emp.soCCHN?emp.soCCHN:'')+'</td>' +
-        '<td style="text-align:center">'+(emp&&emp.ngayCapCCHN?fmtDate(emp.ngayCapCCHN):'')+'</td></tr>';
+        '<td style="text-align:center">'+(thongTinCCHNHuongDan(r).soCCHN)+'</td>' +
+        '<td style="text-align:center">'+(thongTinCCHNHuongDan(r).ngayCap)+'</td></tr>';
       }).join('');
       const tenPho = {};
       xong.forEach(({r})=>{ if (r.nguoiKy) tenPho[r.nguoiKy] = (tenPho[r.nguoiKy]||0) + 1; });
@@ -2433,8 +2433,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         '<td style="text-align:center">'+fmtDate(r.tuNgay)+' – '+fmtDate(r.denNgay)+'</td>' +
         '<td style="text-align:center">'+((r.soThang!=null && r.soThang!=='') ? parseFloat(r.soThang) : monthsDecimal(r.tuNgay,r.denNgay)).toFixed(1)+'</td>' +
         '<td>'+(r.nguoiHuongDan||'')+'</td>' +
-        '<td style="text-align:center">'+(emp&&emp.soCCHN?emp.soCCHN:'')+'</td>' +
-        '<td style="text-align:center">'+(emp&&emp.ngayCapCCHN?fmtDate(emp.ngayCapCCHN):'')+'</td></tr>';
+        '<td style="text-align:center">'+(thongTinCCHNHuongDan(r).soCCHN)+'</td>' +
+        '<td style="text-align:center">'+(thongTinCCHNHuongDan(r).ngayCap)+'</td></tr>';
       }).join('');
       const tenPho = {};
       xong.forEach(({r})=>{ if (r.nguoiKy) tenPho[r.nguoiKy] = (tenPho[r.nguoiKy]||0) + 1; });
@@ -2470,8 +2470,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         '<td style="text-align:center">'+fmtDate(r.tuNgay)+' – '+fmtDate(r.denNgay)+'</td>' +
         '<td style="text-align:center">'+((r.soThang!=null && r.soThang!=='') ? parseFloat(r.soThang) : monthsDecimal(r.tuNgay,r.denNgay)).toFixed(1)+'</td>' +
         '<td>'+(r.nguoiHuongDan||'')+'</td>' +
-        '<td style="text-align:center">'+(emp&&emp.soCCHN?emp.soCCHN:'')+'</td>' +
-        '<td style="text-align:center">'+(emp&&emp.ngayCapCCHN?fmtDate(emp.ngayCapCCHN):'')+'</td></tr>';
+        '<td style="text-align:center">'+(thongTinCCHNHuongDan(r).soCCHN)+'</td>' +
+        '<td style="text-align:center">'+(thongTinCCHNHuongDan(r).ngayCap)+'</td></tr>';
       }).join('');
       const signBlockPreview = 'Gia Lai, ngày ..... tháng ..... năm '+new Date().getFullYear()+'<br>TRƯỞNG KHOA<br><span class="sign-note">(Ký, ghi rõ họ tên)</span><br>' +
           chuKyImgHtmlForWord(sig) +
@@ -2773,8 +2773,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         '<td style="text-align:center">'+fmtDate(r.tuNgay)+' – '+fmtDate(r.denNgay)+'</td>' +
         '<td style="text-align:center">'+((r.soThang!=null && r.soThang!=='') ? parseFloat(r.soThang) : monthsDecimal(r.tuNgay,r.denNgay)).toFixed(1)+'</td>' +
         '<td>'+(r.nguoiHuongDan||'')+'</td>' +
-        '<td style="text-align:center">'+(emp&&emp.soCCHN?emp.soCCHN:'')+'</td>' +
-        '<td style="text-align:center">'+(emp&&emp.ngayCapCCHN?fmtDate(emp.ngayCapCCHN):'')+'</td></tr>';
+        '<td style="text-align:center">'+(thongTinCCHNHuongDan(r).soCCHN)+'</td>' +
+        '<td style="text-align:center">'+(thongTinCCHNHuongDan(r).ngayCap)+'</td></tr>';
       }).join('');
       const bodyHtml =
         '<table class="kv" style="table-layout:fixed"><colgroup><col style="width:42%"><col style="width:58%"></colgroup><tr>' +
@@ -7280,6 +7280,36 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         '<div style="text-align:center">-------------</div>' + rightBlockHtml + '</td>' +
       '</tr></table>';
   }
+  // ---- Tra Số CCHN + Ngày cấp của người hướng dẫn để điền vào các bảng in/xuất ----
+  // Ưu tiên nhân viên theo mã đã phân công; nếu hồ sơ đó thiếu số CCHN (hoặc mã không còn khớp,
+  // ví dụ dữ liệu nhập từ file chỉ có họ tên) thì tra theo họ tên — ưu tiên đúng khoa, chọn chứng chỉ
+  // mới nhất — lần lượt trong danh sách nhân viên, dữ liệu gốc và Phụ lục II. Trùng tên khác người
+  // mà không phân biệt được theo khoa thì để trống, tránh điền nhầm.
+  function thongTinCCHNHuongDan(r){
+    const rong = { soCCHN:'', ngayCap:'' };
+    if (!r) return rong;
+    const idEmp = r.nguoiHuongDanId ? (state.employees||[]).find(e=>e.id===r.nguoiHuongDanId) : null;
+    if (idEmp && idEmp.soCCHN) return { soCCHN: idEmp.soCCHN, ngayCap: idEmp.ngayCapCCHN ? fmtDate(idEmp.ngayCapCCHN) : '' };
+    const boNgoac = x => String(x||'').replace(/\([^)]*\)/g,'');
+    const ten = normTen(boNgoac(r.nguoiHuongDan || (idEmp ? idEmp.hoTen : '')));
+    if (!ten) return rong;
+    const khoaN = normalizeKhoaName(r.khoaTen || state.unitName || '');
+    const units = (state.config && state.config.units) || [];
+    const chon = (list, tenKhoaCua) => {
+      list = list.filter(x => x.soCCHN && normTen(boNgoac(x.hoTen)) === ten);
+      if (!list.length) return null;
+      const cungKhoa = khoaN ? list.filter(x => normalizeKhoaName(tenKhoaCua(x)) === khoaN) : [];
+      const pool = cungKhoa.length ? cungKhoa : list;
+      if (new Set(pool.map(x => x.ngaySinh || '')).size > 1) return null;
+      return pool.slice().sort((a,b)=> String(b.ngayCapCCHN||'').localeCompare(String(a.ngayCapCCHN||'')))[0];
+    };
+    const hit = chon(state.employees||[], x => (units.find(u=>u.id===x.donViId)||{}).name || '')
+             || chon(SEED_DATA, x => x.donVi || '');
+    if (hit) return { soCCHN: hit.soCCHN, ngayCap: hit.ngayCapCCHN ? fmtDate(hit.ngayCapCCHN) : '' };
+    const hd = HD_LIST_PHULUC2.filter(x => normTen(x.t) === ten);
+    if (hd.length === 1) return { soCCHN: hd[0].c || '', ngayCap: hd[0].n || '' };
+    return rong;
+  }
   // ---- KẾ HOẠCH LUÂN KHOA — mẫu riêng gửi kèm sau khi Phòng CĐT lập/áp dụng kế hoạch phân bổ, để
   // Khoa/Phòng xem nhanh đúng lịch cụ thể của 1 học viên (không phải văn bản hành chính có giá trị
   // pháp lý như Công văn/Quyết định — chỉ là bảng tra cứu tiện dụng kèm theo). Đúng theo mẫu tham khảo
@@ -7292,8 +7322,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const tableRows = rows.map((r,i)=>{
       const emp = r.nguoiHuongDanId ? state.employees.find(e=>e.id===r.nguoiHuongDanId) : null;
       const tenHD = r.nguoiHuongDan || (emp ? emp.hoTen : '') || '—';
-      const soCCHN = emp && emp.soCCHN ? emp.soCCHN : '';
-      const ngayCap = emp && emp.ngayCapCCHN ? fmtDate(emp.ngayCapCCHN) : '';
+      const ttCC = thongTinCCHNHuongDan(r);
+      const soCCHN = ttCC.soCCHN;
+      const ngayCap = ttCC.ngayCap;
       return '<tr><td style="text-align:center">'+(i+1)+'</td><td>'+(r.khoaTen||'……………………')+'</td>' +
         '<td style="text-align:center">'+fmtDateRange(r.tuNgay, r.denNgay)+'</td>' +
         '<td style="text-align:center">'+(parseFloat(r.soThang)||0).toFixed(1)+'</td>' +
@@ -10344,8 +10375,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         '<td style="text-align:center">'+fmtDate(r.tuNgay)+' – '+fmtDate(r.denNgay)+'</td>' +
         '<td style="text-align:center">'+((r.soThang!=null && r.soThang!=='') ? parseFloat(r.soThang) : monthsDecimal(r.tuNgay,r.denNgay)).toFixed(1)+'</td>' +
         '<td>'+(r.nguoiHuongDan||'')+'</td>' +
-        '<td style="text-align:center">'+(emp&&emp.soCCHN?emp.soCCHN:'')+'</td>' +
-        '<td style="text-align:center">'+(emp&&emp.ngayCapCCHN?fmtDate(emp.ngayCapCCHN):'')+'</td>' +
+        '<td style="text-align:center">'+(thongTinCCHNHuongDan(r).soCCHN)+'</td>' +
+        '<td style="text-align:center">'+(thongTinCCHNHuongDan(r).ngayCap)+'</td>' +
         '<td style="text-align:center">'+(r.trangThai==='Đã phân công'?'Đã phân công':'Chờ phân công')+'</td></tr>';
       }).join('');
       const tieuDe = 'DANH SÁCH HỌC VIÊN' + (tenKhoaDangLoc ? ' TẠI ' + tenKhoaDangLoc.toUpperCase() : ' TOÀN VIỆN');
@@ -10389,8 +10420,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         '<td style="text-align:center">'+fmtDate(r.tuNgay)+' – '+fmtDate(r.denNgay)+'</td>' +
         '<td style="text-align:center">'+((r.soThang!=null && r.soThang!=='') ? parseFloat(r.soThang) : monthsDecimal(r.tuNgay,r.denNgay)).toFixed(1)+'</td>' +
         '<td>'+(r.nguoiHuongDan||'')+'</td>' +
-        '<td style="text-align:center">'+(emp&&emp.soCCHN?emp.soCCHN:'')+'</td>' +
-        '<td style="text-align:center">'+(emp&&emp.ngayCapCCHN?fmtDate(emp.ngayCapCCHN):'')+'</td>' +
+        '<td style="text-align:center">'+(thongTinCCHNHuongDan(r).soCCHN)+'</td>' +
+        '<td style="text-align:center">'+(thongTinCCHNHuongDan(r).ngayCap)+'</td>' +
         '<td style="text-align:center">'+(r.trangThai==='Đã phân công'?'Đã phân công':'Chờ phân công')+'</td></tr>';
       }).join('');
       // Chữ ký + tên Trưởng khoa thật lấy từ dữ liệu ĐÃ LƯU trong hồ sơ từng học viên (Firebase),
