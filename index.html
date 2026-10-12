@@ -91,6 +91,16 @@
         await deleteDoc(ref).catch(()=>{});
         return { key: key, deleted: true, shared: !!shared };
       },
+      // Tải NGUYÊN NỘI DUNG mọi khoá cùng tiền tố chỉ bằng 1 lượt gọi máy chủ (thay vì liệt kê
+      // tên khoá rồi gọi lại máy chủ cho TỪNG khoá một — vừa tải 2 lần cùng 1 dữ liệu, vừa phải
+      // chờ hàng trăm lượt gọi mạng). Dùng cho bước khởi động ứng dụng.
+      getMany: async function(prefix){
+        const colRef = collection(db, COL);
+        const snaps = await getDocs(query(colRef, where('key','>=',prefix), where('key','<', prefix + '\uf8ff')));
+        const out = [];
+        snaps.forEach(d=>{ const x = d.data(); if (x && typeof x.key === 'string') out.push({ key: x.key, value: x.value }); });
+        return out;
+      },
       list: async function(prefix, shared){
         const colRef = collection(db, COL);
         let snaps;
@@ -907,12 +917,25 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         return (r && r.value) ? JSON.parse(r.value) : fallback;
       } catch(e){ return fallback; }
     }
+    // ⚠ SỬA LỖI NHÂN ĐÔI/NHÂN BA TOÀN BỘ KHOA & NHÂN VIÊN: trước đây nếu mạng chập chờn đúng lúc mở
+    // app, đọc "cấu hình" và "danh sách nhân viên" bị lỗi nhưng vẫn bị coi như hệ thống TRỐNG → app tự
+    // tạo lại toàn bộ khoa + nhân viên mẫu với mã mới, rồi ghép chung với dữ liệu thật trên máy chủ →
+    // mỗi khoa/nhân viên bị nhân thêm 1 bản. Nay 2 khoá này đọc lỗi thì DỪNG và báo, không tự tạo lại.
+    async function fetchJSONStrict(key, fallback){
+      try {
+        const r = await window.storage.get(key, true);
+        return (r && r.value) ? JSON.parse(r.value) : fallback;
+      } catch(e){
+        if (/Không tìm thấy khoá/.test(String(e && e.message))) return fallback;
+        throw new Error('Không tải được dữ liệu "' + key + '" từ máy chủ (' + (e && e.message ? e.message : 'lỗi mạng') + ').');
+      }
+    }
     const [
       cfg, employeesRaw, pending, approvedLog, rejectedLog, rejectedEmployeesLog,
       customTemplates, docChecklist, phieuTiepNhanSeq, hiddenBuiltinMau, adminUsers, trainees, cdtMauOverride
     ] = await Promise.all([
-      fetchJSON('system_config', { adminPin: "0000", units: [] }),
-      fetchJSON('employees', []),
+      fetchJSONStrict('system_config', { adminPin: "0000", units: [] }),
+      fetchJSONStrict('employees', []),
       (async ()=>{ try { return await loadRecordCollectionSplit('cnkt_pending', 'pending_activities', _pendingSnap); } catch(e){ return []; } })(),
       (async ()=>{ try { return await loadRecordCollectionSplit('cnkt_approved', 'approved_log', _approvedSnap); } catch(e){ return []; } })(),
       (async ()=>{ try { return await loadRecordCollectionSplit('cnkt_rejected', 'rejected_log', _rejectedSnap); } catch(e){ return []; } })(),
@@ -1026,17 +1049,27 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         latest = (r && r.value) ? JSON.parse(r.value) : null;
       } catch(e){ latest = null; }
       if (latest){
+        // ⚠ SỬA LỖI "xoá đơn vị xong lại hiện lại": trước đây bước ghép với bản trên máy chủ tự cộng
+        // lại cả những đơn vị VỪA bị xoá (vì máy chủ vẫn còn). Nay ghi nhớ danh sách id đã xoá
+        // (deletedUnitIds) — ghép từ cả 2 phía — và loại hẳn các id này khi ghép.
+        const daXoa = new Set([].concat(latest.deletedUnitIds||[], state.config.deletedUnitIds||[]));
+        state.config.deletedUnitIds = Array.from(daXoa);
+        state.config.deletedEmployeeIds = Array.from(new Set([].concat(latest.deletedEmployeeIds||[], state.config.deletedEmployeeIds||[])));
         ['units','rotationTemplates'].forEach(key=>{
           if (Array.isArray(latest[key]) && Array.isArray(state.config[key])){
             const merged = {};
             latest[key].forEach(x=>{ if (x && x.id) merged[x.id] = x; });
             state.config[key].forEach(x=>{ if (x && x.id) merged[x.id] = x; });
-            state.config[key] = Object.values(merged);
+            state.config[key] = Object.values(merged).filter(x=> key !== 'units' || !daXoa.has(x.id));
           }
         });
       }
       const res = await window.storage.set('system_config', JSON.stringify(state.config), true);
     } catch(err){ console.error('saveConfig lỗi:', err); }
+  }
+  async function ghiNhanXoaNhanVien(ids){
+    state.config.deletedEmployeeIds = Array.from(new Set([].concat(state.config.deletedEmployeeIds||[], ids)));
+    await saveConfig();
   }
   async function saveEmployees(){
     // AN TOÀN HƠN bản cũ: bản cũ ghi đè NGUYÊN KHỐI toàn bộ mảng employees đang có trong bộ nhớ —
@@ -1055,7 +1088,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const merged = {};
       latest.forEach(e=>{ if (e && e.id) merged[e.id] = e; });
       (state.employees||[]).forEach(e=>{ if (e && e.id) merged[e.id] = e; });
-      const mergedArr = Object.values(merged);
+      // Nhân viên đã xoá/từ chối/gộp thì không cộng lại từ bản trên máy chủ (trước đây bị hiện lại).
+      const daXoaNV = new Set(state.config.deletedEmployeeIds||[]);
+      const mergedArr = Object.values(merged).filter(e=> !daXoaNV.has(e.id));
       const res = await window.storage.set('employees', JSON.stringify(mergedArr), true);
       if (res) state.employees = mergedArr; // đồng bộ lại bộ nhớ hiện tại theo đúng bản đã ghép
     } catch(err){ console.error('saveEmployees lỗi:', err); }
@@ -1082,14 +1117,23 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // threshold = 0, nó sẽ tách HẾT mọi chuỗi base64 còn lại, bất kể kích thước, để xử lý đúng
   // trường hợp "nhiều file nhỏ cộng dồn" này (xem saveTrainee bên dưới).
   const FIRESTORE_SAFE_LIMIT = 900000; // để dư ~150KB an toàn dưới giới hạn 1.048.487 byte của Firestore
+  // ⚡ Mã file theo NỘI DUNG (trước đây mỗi lần lưu hồ sơ lại sinh mã MỚI cho mọi ảnh/chữ ký và ghi
+  // lại toàn bộ, để lại rất nhiều bản trùng thừa trên máy chủ + làm thao tác lưu chậm). Nay cùng
+  // 1 ảnh luôn cùng 1 mã; ảnh đã có trên máy chủ thì không ghi lại nữa.
+  const _traineeBlobKnown = new Set();
+  async function ghiBlobHocVien(key, v){
+    if (_traineeBlobKnown.has(key)) return;
+    await window.storage.set(key, v, true);
+    _traineeBlobKnown.add(key);
+  }
   async function offloadLargeBlobs(node, traineeId, threshold){
     threshold = (typeof threshold === 'number') ? threshold : BLOB_OFFLOAD_THRESHOLD;
     if (Array.isArray(node)){
       for (let i=0;i<node.length;i++){
         const v = node[i];
         if (typeof v === 'string' && v.indexOf('data:') === 0 && v.length > threshold){
-          const blobId = uid('blob');
-          await window.storage.set('trainee_blob:'+traineeId+':'+blobId, v, true);
+          const blobId = actBlobId(v);
+          await ghiBlobHocVien('trainee_blob:'+traineeId+':'+blobId, v);
           node[i] = BLOB_REF_PREFIX + blobId;
         } else if (v && typeof v === 'object'){
           await offloadLargeBlobs(v, traineeId, threshold);
@@ -1099,8 +1143,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       for (const key of Object.keys(node)){
         const v = node[key];
         if (typeof v === 'string' && v.indexOf('data:') === 0 && v.length > threshold){
-          const blobId = uid('blob');
-          await window.storage.set('trainee_blob:'+traineeId+':'+blobId, v, true);
+          const blobId = actBlobId(v);
+          await ghiBlobHocVien('trainee_blob:'+traineeId+':'+blobId, v);
           node[key] = BLOB_REF_PREFIX + blobId;
         } else if (v && typeof v === 'object'){
           await offloadLargeBlobs(v, traineeId, threshold);
@@ -1108,16 +1152,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
     }
   }
-  async function hydrateBlobs(node, traineeId){
+  async function hydrateBlobs(node, traineeId, blobMap){
     if (Array.isArray(node)){
       for (let i=0;i<node.length;i++){
         const v = node[i];
         if (typeof v === 'string' && v.indexOf(BLOB_REF_PREFIX) === 0){
           const blobId = v.slice(BLOB_REF_PREFIX.length);
-          try { const rec = await window.storage.get('trainee_blob:'+traineeId+':'+blobId, true); node[i] = (rec && rec.value) ? rec.value : ''; }
+          const mapKey = 'trainee_blob:'+traineeId+':'+blobId;
+          if (blobMap && blobMap.has(mapKey)){ node[i] = blobMap.get(mapKey) || ''; continue; }
+          try { const rec = await window.storage.get(mapKey, true); node[i] = (rec && rec.value) ? rec.value : ''; }
           catch(e){ node[i] = ''; }
         } else if (v && typeof v === 'object'){
-          await hydrateBlobs(v, traineeId);
+          await hydrateBlobs(v, traineeId, blobMap);
         }
       }
     } else if (node && typeof node === 'object'){
@@ -1125,10 +1171,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         const v = node[key];
         if (typeof v === 'string' && v.indexOf(BLOB_REF_PREFIX) === 0){
           const blobId = v.slice(BLOB_REF_PREFIX.length);
-          try { const rec = await window.storage.get('trainee_blob:'+traineeId+':'+blobId, true); node[key] = (rec && rec.value) ? rec.value : ''; }
+          const mapKey = 'trainee_blob:'+traineeId+':'+blobId;
+          if (blobMap && blobMap.has(mapKey)){ node[key] = blobMap.get(mapKey) || ''; continue; }
+          try { const rec = await window.storage.get(mapKey, true); node[key] = (rec && rec.value) ? rec.value : ''; }
           catch(e){ node[key] = ''; }
         } else if (v && typeof v === 'object'){
-          await hydrateBlobs(v, traineeId);
+          await hydrateBlobs(v, traineeId, blobMap);
         }
       }
     }
@@ -1230,6 +1278,20 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         try { await window.storage.delete(legacyKey, true); } catch(e){}
       }
     } catch(e){ /* không có key cũ hoặc đã di trú rồi — bỏ qua */ }
+    if (window.storage.getMany){
+      try {
+        const docs = await window.storage.getMany(prefix+':');
+        const out = [];
+        docs.forEach(d=>{
+          try {
+            if (!d.value) return;
+            out.push(JSON.parse(d.value));
+            snapshotStore[d.key.slice(prefix.length+1)] = d.value;
+          } catch(e){}
+        });
+        return out;
+      } catch(e){ console.warn('Tải nhanh '+prefix+' lỗi, chuyển sang cách tải cũ:', e); }
+    }
     let keys = [];
     try {
       const listRes = await window.storage.list(prefix+':', true);
@@ -1286,6 +1348,46 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     } catch(e){ /* không có key cũ hoặc đã di trú rồi — bỏ qua */ }
     // Đọc danh sách theo từng bản ghi riêng — tải SONG SONG theo từng lô nhỏ (nhanh hơn nhiều
     // so với tải tuần tự từng cái một, đặc biệt khi số học viên tăng lên).
+    // ⚡ TĂNG TỐC KHỞI ĐỘNG: tải toàn bộ hồ sơ học viên + toàn bộ file đính kèm đã tách riêng, mỗi
+    // loại chỉ 1 lượt gọi máy chủ (2 lượt chạy song song), rồi ghép file vào hồ sơ ngay trong máy —
+    // thay cho cách cũ: liệt kê → tải lại từng hồ sơ → tải từng file của từng hồ sơ nối tiếp nhau.
+    if (window.storage.getMany){
+      try {
+        // ⚡ TĂNG TỐC KHỞI ĐỘNG: toàn bộ hồ sơ học viên tải trong 1 lượt; sau đó CHỈ tải đúng những
+        // ảnh/file mà hồ sơ đang dùng, nhiều file cùng lúc (song song) thay vì lần lượt từng file.
+        const docs = await window.storage.getMany('trainees:');
+        const out = [];
+        const refs = []; // { obj, k, key }
+        const gom = (node, tid)=>{
+          const ks = Array.isArray(node) ? node.map((_,i)=>i) : (node && typeof node === 'object' ? Object.keys(node) : []);
+          for (const k of ks){
+            const v = node[k];
+            if (typeof v === 'string' && v.indexOf(BLOB_REF_PREFIX) === 0) refs.push({ obj: node, k, key: 'trainee_blob:'+tid+':'+v.slice(BLOB_REF_PREFIX.length) });
+            else if (v && typeof v === 'object') gom(v, tid);
+          }
+        };
+        for (const d of docs){
+          try {
+            if (!d.value) continue;
+            const parsed = JSON.parse(d.value);
+            if (parsed && parsed.id){ gom(parsed, parsed.id); out.push(parsed); }
+          } catch(e){ /* bỏ qua bản ghi lỗi, không chặn tải các bản ghi khác */ }
+        }
+        const canTai = Array.from(new Set(refs.map(r=>r.key)));
+        const ketQua = new Map();
+        let viTri = 0;
+        const LUONG = 24; // số file tải cùng lúc
+        await Promise.all(Array.from({ length: Math.min(LUONG, canTai.length) }, async ()=>{
+          while (viTri < canTai.length){
+            const key = canTai[viTri++];
+            try { const rec = await window.storage.get(key, true); ketQua.set(key, (rec && rec.value) ? rec.value : ''); _traineeBlobKnown.add(key); }
+            catch(e){ ketQua.set(key, ''); }
+          }
+        }));
+        refs.forEach(r=>{ r.obj[r.k] = ketQua.get(r.key) || ''; });
+        return out;
+      } catch(e){ console.warn('Tải nhanh hồ sơ học viên lỗi, chuyển sang cách tải cũ:', e); }
+    }
     let keys = [];
     try {
       const listRes = await window.storage.list('trainees:', true);
@@ -1322,14 +1424,93 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const year = new Date().getFullYear();
     return String(state.phieuTiepNhanSeq).padStart(3,'0') + '/' + year + '/PTNHSTH';
   }
-  async function getActivities(empId){
+  // ---- Hoạt động CNKT đã xác nhận của từng nhân viên (key activities:<empId>) ----
+  // ⚠ SỬA LỖI "bấm Xác nhận duyệt không được": trước đây TOÀN BỘ hoạt động đã duyệt của 1 nhân viên,
+  // KÈM NGUYÊN file minh chứng (ảnh/PDF dạng base64), được gộp vào 1 tài liệu duy nhất. Nhân viên
+  // càng có nhiều hoạt động kèm file, tài liệu càng to — khi vượt giới hạn 1.048.487 byte/tài liệu
+  // của Firestore, máy chủ TỪ CHỐI lưu, nút "Xác nhận" coi như không phản hồi (lỗi bị nuốt, không
+  // báo gì). Nay áp dụng đúng cách đã làm cho hồ sơ học viên: file minh chứng được tách ra tài liệu
+  // riêng (act_blob:<empId>:<mã>), trong danh sách chỉ giữ mã tham chiếu ngắn; khi đọc ra tự ghép lại
+  // đúng file gốc — các màn hình xem/in/xuất khác không phải sửa gì.
+  function actBlobId(str){
+    // Mã nhận diện theo NỘI DUNG file: cùng 1 file lưu lại nhiều lần vẫn dùng chung 1 mã,
+    // không phải ghi lại, không sinh ra bản trùng.
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++){
+      const ch = str.charCodeAt(i);
+      h1 = Math.imul(h1 ^ ch, 2654435761);
+      h2 = Math.imul(h2 ^ ch, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return 'h' + (h2>>>0).toString(36) + (h1>>>0).toString(36) + '_' + str.length.toString(36);
+  }
+  const _actBlobWritten = new Set();
+  async function packActivityBlobs(node, empId, threshold, used){
+    const keys = Array.isArray(node) ? node.map((_,i)=>i) : (node && typeof node === 'object' ? Object.keys(node) : []);
+    for (const k of keys){
+      const v = node[k];
+      if (typeof v === 'string' && v.indexOf('data:') === 0 && v.length > threshold){
+        const id = actBlobId(v);
+        const key = 'act_blob:'+empId+':'+id;
+        if (!_actBlobWritten.has(key)){
+          await window.storage.set(key, v, true);
+          _actBlobWritten.add(key);
+        }
+        used.add(id);
+        node[k] = BLOB_REF_PREFIX + id;
+      } else if (typeof v === 'string' && v.indexOf(BLOB_REF_PREFIX) === 0){
+        used.add(v.slice(BLOB_REF_PREFIX.length));
+      } else if (v && typeof v === 'object'){
+        await packActivityBlobs(v, empId, threshold, used);
+      }
+    }
+  }
+  async function hydrateActivityBlobs(node, empId){
+    const keys = Array.isArray(node) ? node.map((_,i)=>i) : (node && typeof node === 'object' ? Object.keys(node) : []);
+    for (const k of keys){
+      const v = node[k];
+      if (typeof v === 'string' && v.indexOf(BLOB_REF_PREFIX) === 0){
+        const key = 'act_blob:'+empId+':'+v.slice(BLOB_REF_PREFIX.length);
+        try { const rec = await window.storage.get(key, true); node[k] = (rec && rec.value) ? rec.value : ''; _actBlobWritten.add(key); }
+        catch(e){ node[k] = ''; }
+      } else if (v && typeof v === 'object'){
+        await hydrateActivityBlobs(v, empId);
+      }
+    }
+  }
+  // strict = true: dùng cho các thao tác GHI (duyệt/sửa/huỷ). Nếu đọc lỗi do mạng/máy chủ (không phải
+  // do nhân viên chưa có hoạt động nào), báo lỗi thay vì coi như danh sách rỗng — tránh ghi đè mất
+  // toàn bộ hoạt động cũ của nhân viên chỉ còn lại đúng 1 hoạt động vừa duyệt.
+  async function getActivities(empId, strict){
+    let r;
     try {
-      const r = await window.storage.get('activities:'+empId, true);
-      return r ? JSON.parse(r.value) : [];
-    } catch(e){ return []; }
+      r = await window.storage.get('activities:'+empId, true);
+    } catch(e){
+      if (strict && !/Không tìm thấy khoá/.test(String(e && e.message))) throw e;
+      return [];
+    }
+    try {
+      const list = r && r.value ? JSON.parse(r.value) : [];
+      await hydrateActivityBlobs(list, empId);
+      return list;
+    } catch(e){
+      if (strict) throw e;
+      return [];
+    }
   }
   async function saveActivities(empId, list){
-    await window.storage.set('activities:'+empId, JSON.stringify(list), true);
+    const clone = JSON.parse(JSON.stringify(list || []));
+    const used = new Set();
+    await packActivityBlobs(clone, empId, BLOB_OFFLOAD_THRESHOLD, used);
+    if (JSON.stringify(clone).length > FIRESTORE_SAFE_LIMIT){
+      // Nhiều file nhỏ cộng dồn vẫn quá giới hạn → tách hết mọi file còn lại.
+      await packActivityBlobs(clone, empId, 0, used);
+    }
+    if (JSON.stringify(clone).length > FIRESTORE_SAFE_LIMIT){
+      throw new Error('Danh sách hoạt động của nhân viên này vẫn vượt giới hạn dung lượng 1 tài liệu ngay cả sau khi đã tách hết file đính kèm.');
+    }
+    await window.storage.set('activities:'+empId, JSON.stringify(clone), true);
   }
 
   function cycleInfo(emp, refDate){
@@ -1555,6 +1736,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   function removeVNAccents(str){
     return (str||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
       .replace(/đ/g,'d').replace(/Đ/g,'D');
+  }
+  // Khoá so trùng TÊN ĐƠN VỊ: chuẩn hoá Unicode (chữ tiếng Việt gõ/dán từ Word, Excel có thể cùng
+  // hiển thị "Khoa Gây mê hồi sức" nhưng mã ký tự bên trong khác nhau), bỏ khoảng trắng thừa, không
+  // phân biệt hoa/thường. GIỮ NGUYÊN dấu để không gộp nhầm 2 đơn vị khác tên.
+  function khoaTenKey(str){
+    return String(str||'').normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase();
+  }
+  function timDonViTrungTen(name){
+    const k = khoaTenKey(name);
+    return k ? (state.config.units||[]).find(u=> khoaTenKey(u.name) === k) || null : null;
   }
   function normalizeKhoaName(str){
     return removeVNAccents(String(str||'').trim().toLowerCase())
@@ -1840,6 +2031,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           const name = document.getElementById('new-unit-name').value.trim();
           const pin = document.getElementById('new-unit-pin').value.trim();
           if (!name || !pin){ alert('Vui lòng nhập đầy đủ tên đơn vị và mã PIN.'); return; }
+          if (timDonViTrungTen(name)){ alert('Đơn vị "' + name + '" đã có trong hệ thống — vui lòng chọn đơn vị đó trong danh sách để đăng nhập, không tạo thêm.'); return; }
           const id = uid('unit');
           state.config.units.push({ id, name, pin });
           await saveConfig();
@@ -1911,7 +2103,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     document.getElementById('btn-refresh').onclick = async ()=>{
       const btn = document.getElementById('btn-refresh');
       btn.textContent = '🔄 Đang tải…';
-      await loadAll();
+      try { await loadAll(); }
+      catch(err){ btn.textContent = '🔄 Làm mới dữ liệu'; alert('⚠ ' + (err && err.message ? err.message : 'Lỗi kết nối') + '\n\nDữ liệu đang hiển thị vẫn giữ nguyên — anh/chị thử lại sau.'); return; }
       hoursCache = {};
       showToast('Đã làm mới dữ liệu mới nhất.');
       renderFn();
@@ -3154,6 +3347,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     if (emp) overlay.querySelector('#m-delete').onclick = async ()=>{
       if (!confirm('Xoá nhân viên này và toàn bộ dữ liệu hoạt động CNKT liên quan?')) return;
       state.employees = state.employees.filter(e=>e.id!==emp.id);
+      await ghiNhanXoaNhanVien([emp.id]);
       await saveEmployees();
       await window.storage.delete('activities:'+emp.id, true).catch(()=>{});
       overlay.remove(); onDone();
@@ -6257,7 +6451,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       try {
         await saveApprovedLog();
         // Đồng bộ vào hồ sơ giờ tín chỉ của nhân viên để bảng tổng hợp/tính giờ luôn khớp.
-        const acts = await getActivities(p.empId);
+        const acts = await getActivities(p.empId, true);
         const idx = acts.findIndex(a=>a.id===p.id);
         if (idx>=0){
           acts[idx] = Object.assign({}, acts[idx], {
@@ -6467,11 +6661,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         });
         wrap.querySelectorAll('[data-approve]').forEach(b=>{
           b.onclick = async ()=>{
+            if (b.disabled) return;
             const id = b.getAttribute('data-approve');
             const rec = state.pending.find(p=>p.id===id);
+            if (!rec){ showToast('Phiếu này không còn trong danh sách chờ duyệt — đang tải lại.'); renderAdminApp(); return; }
+            const nhanCu = b.innerHTML;
+            b.disabled = true; b.innerHTML = '⏳ Đang lưu…';
+            try {
             const confirmedRec = { id: rec.id, loaiHinh: rec.loaiHinh, tenHoatDong: rec.tenHoatDong, donViToChuc: rec.donViToChuc, ngayThamGia: rec.ngayThamGia, ngayKetThuc: rec.ngayKetThuc||rec.ngayThamGia, soChungNhanCME: rec.soChungNhanCME||'', soGioTinChi: rec.soGioTinChi, bangChung: rec.bangChung, bangChungFile: rec.bangChungFile||'', bangChungFileType: rec.bangChungFileType||'', bangChungFileName: rec.bangChungFileName||'', trangThai:'Đã xác nhận', confirmedAt: todayISO() };
-            const acts = await getActivities(rec.empId);
-            acts.push(confirmedRec);
+            if (rec.bangChungFilesExtra && rec.bangChungFilesExtra.length) confirmedRec.bangChungFilesExtra = rec.bangChungFilesExtra;
+            const acts = await getActivities(rec.empId, true);
+            const viTri = acts.findIndex(a=>a && a.id===confirmedRec.id);
+            if (viTri >= 0) acts[viTri] = confirmedRec; else acts.push(confirmedRec);
             await saveActivities(rec.empId, acts);
             invalidateHours(rec.empId);
             state.pending = state.pending.filter(p=>p.id!==id);
@@ -6480,6 +6681,11 @@ https://github.com/nodeca/pako/blob/main/LICENSE
             await saveApprovedLog();
             showToast('Đã xác nhận giờ tín chỉ cho ' + rec.empName + '.');
             renderAdminApp();
+            } catch(err){
+              console.error('Xác nhận hoạt động CNKT lỗi:', err);
+              b.disabled = false; b.innerHTML = nhanCu;
+              alert('⚠ Chưa xác nhận được phiếu của ' + (rec.empName||'nhân viên') + '.\n\nChi tiết lỗi: ' + (err && err.message ? err.message : 'không rõ') + '\n\nPhiếu vẫn còn nguyên ở mục Chưa duyệt — anh/chị kiểm tra kết nối mạng rồi bấm Xác nhận lại.');
+            }
           };
         });
         wrap.querySelectorAll('[data-reject]').forEach(b=>{
@@ -6562,7 +6768,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               state.rejectedLog.unshift(Object.assign({}, p, { rejectedAt: todayISO(), lyDo: 'Huỷ bởi Admin: ' + reason }));
               await saveApprovedLog();
               await saveRejectedLog();
-              const acts = await getActivities(p.empId);
+              const acts = await getActivities(p.empId, true);
               await saveActivities(p.empId, acts.filter(a=>a.id!==id));
               invalidateHours(p.empId);
               showToast('Đã huỷ hoạt động — chuyển sang mục "Đã từ chối/huỷ".');
@@ -6646,6 +6852,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               state.rejectedEmployeesLog.unshift(Object.assign({}, e, { donViName: uName, rejectedAt: todayISO(), lyDo: reason }));
               await saveRejectedEmployeesLog();
               state.employees = state.employees.filter(x=>x.id!==id);
+              await ghiNhanXoaNhanVien([id]);
               await saveEmployees();
               showToast('Đã từ chối hồ sơ nhân viên.');
               renderAdminApp();
@@ -7127,7 +7334,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
       let unitId = '';
       if (donViNameRaw && donViNameRaw !== 'Chưa xác định'){
-        let unit = state.config.units.find(u => u.name.toLowerCase() === donViNameRaw.toLowerCase());
+        let unit = timDonViTrungTen(donViNameRaw);
         if (!unit){
           unit = { id: uid('unit'), name: donViNameRaw, pin: randPin() };
           state.config.units.push(unit);
@@ -14241,6 +14448,155 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
   }
 
+  // ---- Gộp các Khoa/Phòng TRÙNG TÊN (cùng tên nhưng nhiều mã đơn vị khác nhau) ----
+  // Nguyên nhân thường gặp: nhập Excel/thêm tay nhiều lần, tên khoa trong file có ký tự Unicode
+  // khác bản đã có nên hệ thống tưởng là khoa mới; hoặc xoá bớt rồi đơn vị cũ tự hiện lại.
+  // Gộp = giữ 1 đơn vị (đơn vị có nhiều nhân viên nhất), chuyển MỌI dữ liệu đang gắn với các mã
+  // trùng (nhân viên, phiếu CNKT, học viên/giai đoạn thực hành, tài khoản, cấu hình…) sang mã giữ lại,
+  // rồi xoá hẳn các mã trùng.
+  function nhomDonViTrung(){
+    const groups = {};
+    (state.config.units||[]).forEach(u=>{ const k = khoaTenKey(u.name); if (!k) return; (groups[k] = groups[k] || []).push(u); });
+    return Object.values(groups).filter(g=> g.length > 1).map(g=>{
+      const dem = u=> (state.employees||[]).filter(e=> e.donViId===u.id).length;
+      const sorted = g.slice().sort((a,b)=> dem(b) - dem(a));
+      return { giu: sorted[0], bo: sorted.slice(1), dem };
+    });
+  }
+  function doiMaDonViDeep(node, map){
+    let changed = false;
+    if (Array.isArray(node)){
+      for (let i=0;i<node.length;i++){
+        const v = node[i];
+        if (typeof v === 'string' && map.has(v)){ node[i] = map.get(v); changed = true; }
+        else if (v && typeof v === 'object'){ if (doiMaDonViDeep(v, map)) changed = true; }
+      }
+    } else if (node && typeof node === 'object'){
+      for (const key of Object.keys(node)){
+        const v = node[key];
+        if (typeof v === 'string' && map.has(v)){ node[key] = map.get(v); changed = true; }
+        else if (v && typeof v === 'object'){ if (doiMaDonViDeep(v, map)) changed = true; }
+        if (map.has(key)){
+          const moi = map.get(key);
+          if (!(moi in node)) node[moi] = node[key];
+          delete node[key]; changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+  // ---- Nhân viên trùng: cùng Số CCHN (hoặc chưa có CCHN thì cùng họ tên + ngày sinh) VÀ cùng khoa ----
+  function nhomNhanVienTrung(){
+    const groups = {};
+    (state.employees||[]).forEach(e=>{
+      const cc = normCC(e.soCCHN);
+      const k = (e.donViId||'') + '||' + (cc ? 'cc:'+cc+'|'+khoaTenKey(e.hoTen) : 'ten:'+khoaTenKey(e.hoTen)+'|'+(e.ngaySinh||''));
+      if (!cc && !khoaTenKey(e.hoTen)) return;
+      (groups[k] = groups[k] || []).push(e);
+    });
+    return Object.values(groups).filter(g=> g.length > 1);
+  }
+  async function gopNhanVienTrung(){
+    const nhom = nhomNhanVienTrung();
+    if (!nhom.length) return 0;
+    const map = new Map();
+    for (const g of nhom){
+      // Giữ bản có nhiều hoạt động CNKT nhất (rồi đến bản tạo sớm nhất); gộp hết hoạt động các bản còn lại vào.
+      const dsAct = await Promise.all(g.map(e=> getActivities(e.id, true)));
+      const thuTu = g.map((e,i)=>({ e, acts: dsAct[i] }))
+        .sort((a,b)=> (b.acts.length - a.acts.length) || String(a.e.createdAt||'').localeCompare(String(b.e.createdAt||'')));
+      const giu = thuTu[0];
+      const gopAct = giu.acts.slice();
+      const daCo = new Set(gopAct.map(a=> a && a.id));
+      for (const x of thuTu.slice(1)){
+        x.acts.forEach(a=>{ if (a && !daCo.has(a.id)){ gopAct.push(a); daCo.add(a.id); } });
+        Object.keys(x.e).forEach(k=>{ if ((giu.e[k] === undefined || giu.e[k] === '' || giu.e[k] === null) && x.e[k] !== '' && x.e[k] != null) giu.e[k] = x.e[k]; });
+        if (x.e.dieuKienHuongDan) giu.e.dieuKienHuongDan = true;
+        map.set(x.e.id, giu.e.id);
+      }
+      if (gopAct.length !== giu.acts.length) await saveActivities(giu.e.id, gopAct);
+      invalidateHours(giu.e.id);
+    }
+    state.employees = state.employees.filter(e=> !map.has(e.id));
+    await ghiNhanXoaNhanVien(Array.from(map.keys()));
+    await saveEmployees();
+    if (doiMaDonViDeep(state.pending, map)) await savePending();
+    if (doiMaDonViDeep(state.approvedLog, map)) await saveApprovedLog();
+    if (doiMaDonViDeep(state.rejectedLog, map)) await saveRejectedLog();
+    if (doiMaDonViDeep(state.adminUsers, map)) await saveAdminUsers();
+    for (const t of (state.trainees||[])){ if (doiMaDonViDeep(t, map)) await saveTrainee(t); }
+    // Hoạt động đã gộp sang bản giữ lại — xoá khoá hoạt động của các bản trùng.
+    for (const id of map.keys()){ try { await window.storage.delete('activities:'+id, true); } catch(e){} invalidateHours(id); }
+    return map.size;
+  }
+  function veGopDonViTrung(content){
+    const wrap = content.querySelector('#units-dup-wrap');
+    if (!wrap) return;
+    const nhom = nhomDonViTrung();
+    // Đếm nhân viên trùng SAU khi gộp khoa (giả lập đổi mã khoa) để báo đúng số sẽ gộp.
+    const mapTam = new Map(); nhom.forEach(g=> g.bo.forEach(u=> mapTam.set(u.id, g.giu.id)));
+    const soNVTrung = (()=>{
+      const groups = {};
+      (state.employees||[]).forEach(e=>{
+        const dv = mapTam.get(e.donViId) || e.donViId || '';
+        const cc = normCC(e.soCCHN);
+        if (!cc && !khoaTenKey(e.hoTen)) return;
+        const k = dv + '||' + (cc ? 'cc:'+cc+'|'+khoaTenKey(e.hoTen) : 'ten:'+khoaTenKey(e.hoTen)+'|'+(e.ngaySinh||''));
+        groups[k] = (groups[k]||0) + 1;
+      });
+      return Object.values(groups).reduce((s,n)=> s + (n>1 ? n-1 : 0), 0);
+    })();
+    if (!nhom.length && !soNVTrung){ wrap.innerHTML = ''; return; }
+    wrap.innerHTML = `<div class="card" style="border-color:var(--amber);background:#fffceb">
+      <h3 style="margin-top:0">⚠ Phát hiện dữ liệu trùng: ${nhom.length} Khoa/Phòng trùng tên${soNVTrung ? ' — ' + soNVTrung + ' hồ sơ nhân viên trùng (cùng số CCHN, cùng khoa)' : ''}</h3>
+      <p class="muted" style="margin-top:0">Cùng 1 tên nhưng có nhiều mã đơn vị — làm danh sách chọn khoa hiện lặp, nhân viên/học viên bị chia lẻ ở nhiều mã. Bấm "Gộp" để giữ lại 1 đơn vị (đơn vị có nhiều nhân viên nhất) và chuyển toàn bộ dữ liệu của các bản trùng về đơn vị đó.</p>
+      ${nhom.length ? `<table><thead><tr><th>Tên đơn vị</th><th>Giữ lại (PIN)</th><th>Gộp vào và xoá</th></tr></thead><tbody>
+      ${nhom.map(g=>`<tr><td>${g.giu.name}</td><td>${g.dem(g.giu)} nhân viên — PIN <b>${g.giu.pin||''}</b></td><td>${g.bo.map(u=>`${g.dem(u)} nhân viên — PIN ${u.pin||''}`).join('<br>')}</td></tr>`).join('')}
+      </tbody></table>` : ''}
+      ${soNVTrung ? `<p style="margin:8px 0 0">Nhân viên trùng sẽ được gộp về 1 hồ sơ (giữ bản có nhiều hoạt động CNKT nhất); <b>toàn bộ hoạt động CNKT, giờ tín chỉ</b> của các bản trùng được cộng dồn vào, không mất dữ liệu.</p>` : ''}
+      <button type="button" id="btn-gop-donvi" style="margin-top:10px">🔀 Gộp dữ liệu trùng</button>
+      <p class="muted" style="margin-bottom:0">Sau khi gộp, khoa đăng nhập bằng <b>PIN của đơn vị giữ lại</b> (cột giữa). Nên <b>Sao lưu dữ liệu</b> ở mục Cài đặt trước khi gộp.</p>
+    </div>`;
+    wrap.querySelector('#btn-gop-donvi').onclick = async ()=>{
+      if (!confirm('Gộp ' + nhom.length + ' nhóm Khoa/Phòng trùng và ' + soNVTrung + ' hồ sơ nhân viên trùng?\n\nToàn bộ nhân viên, phiếu CNKT, giờ tín chỉ, học viên và giai đoạn thực hành của các bản trùng sẽ được chuyển về bản giữ lại; các bản trùng bị xoá. Khoa đăng nhập bằng PIN của đơn vị giữ lại.')) return;
+      const btn = wrap.querySelector('#btn-gop-donvi');
+      btn.disabled = true; btn.textContent = '⏳ Đang gộp…';
+      try {
+        const map = new Map();
+        nhom.forEach(g=> g.bo.forEach(u=> map.set(u.id, g.giu.id)));
+        state.config.units = state.config.units.filter(u=> !map.has(u.id));
+        state.config.deletedUnitIds = Array.from(new Set([].concat(state.config.deletedUnitIds||[], Array.from(map.keys()))));
+        // Đổi mã trong phần cấu hình còn lại (VD: lộ trình luân khoa mẫu) — tạm tách danh sách
+        // đơn vị và danh sách id đã xoá ra để không bị đổi nhầm.
+        const unitsTam = state.config.units, daXoaTam = state.config.deletedUnitIds;
+        delete state.config.units; delete state.config.deletedUnitIds;
+        try { doiMaDonViDeep(state.config, map); }
+        finally { state.config.units = unitsTam; state.config.deletedUnitIds = daXoaTam; }
+        await saveConfig();
+        if (doiMaDonViDeep(state.employees, map)) await saveEmployees();
+        if (doiMaDonViDeep(state.pending, map)) await savePending();
+        if (doiMaDonViDeep(state.approvedLog, map)) await saveApprovedLog();
+        if (doiMaDonViDeep(state.rejectedLog, map)) await saveRejectedLog();
+        if (doiMaDonViDeep(state.adminUsers, map)) await saveAdminUsers();
+        if (doiMaDonViDeep(state.rejectedEmployeesLog, map)) await saveRejectedEmployeesLog();
+        if (state.cdtMauOverride && doiMaDonViDeep(state.cdtMauOverride, map)) await saveCdtMauOverride();
+        let soHv = 0;
+        for (const t of (state.trainees||[])){
+          if (doiMaDonViDeep(t, map)){ await saveTrainee(t); soHv++; }
+        }
+        if (state.unitId && map.has(state.unitId)) state.unitId = map.get(state.unitId);
+        if (state.approveFilter && map.has(state.approveFilter.unitId)) state.approveFilter.unitId = map.get(state.approveFilter.unitId);
+        btn.textContent = '⏳ Đang gộp nhân viên trùng…';
+        const soNV = await gopNhanVienTrung();
+        showToast('Đã gộp ' + map.size + ' đơn vị trùng, ' + soNV + ' hồ sơ nhân viên trùng (cập nhật ' + soHv + ' hồ sơ học viên).');
+        renderAdminApp();
+      } catch(err){
+        console.error('Gộp đơn vị lỗi:', err);
+        btn.disabled = false; btn.textContent = '🔀 Gộp dữ liệu trùng';
+        alert('⚠ Gộp chưa xong: ' + (err && err.message ? err.message : 'không rõ lỗi') + '\n\nAnh/chị bấm Gộp lại lần nữa — phần đã chuyển xong sẽ không bị chuyển trùng.');
+      }
+    };
+  }
   function renderAdminUnits(content){
     content.innerHTML = `
       <div class="card">
@@ -14259,7 +14615,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         </div>
         <button id="btn-add-unit2">➕ Thêm đơn vị</button>
       </div>
+      <div id="units-dup-wrap"></div>
     `;
+    veGopDonViTrung(content);
     function refreshUnitsTable(){
       const q = document.getElementById('un-search').value.trim().toLowerCase();
       const units = state.config.units.filter(u=> !q || u.name.toLowerCase().includes(q));
@@ -14282,6 +14640,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           if (state.employees.some(e=>e.donViId===id)){ alert('Đơn vị này vẫn còn nhân viên, không thể xoá.'); return; }
           if (!confirm('Xoá đơn vị này?')) return;
           state.config.units = state.config.units.filter(u=>u.id!==id);
+          state.config.deletedUnitIds = Array.from(new Set([].concat(state.config.deletedUnitIds||[], [id])));
           await saveConfig();
           renderAdminApp();
         };
@@ -14293,6 +14652,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const name = document.getElementById('new-unit-name2').value.trim();
       const pin = document.getElementById('new-unit-pin2').value.trim();
       if (!name || !pin){ alert('Vui lòng nhập tên đơn vị và mã PIN.'); return; }
+      if (timDonViTrungTen(name)){ alert('Đơn vị "' + name + '" đã có trong danh sách, không thêm trùng.'); return; }
       state.config.units.push({ id: uid('unit'), name, pin });
       await saveConfig();
       renderAdminApp();
@@ -14533,7 +14893,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       </div>
       <div class="card">
         <h3>Sao lưu & Phục hồi dữ liệu</h3>
-        <p class="muted">Tải toàn bộ dữ liệu hệ thống (đơn vị, nhân viên, hoạt động CNKT đã xác nhận và đang chờ duyệt) thành 1 file để lưu trữ hoặc chuyển sang nơi khác.</p>
+        <p class="muted">Tải toàn bộ dữ liệu hệ thống (đơn vị, nhân viên, hoạt động CNKT đã xác nhận/chờ duyệt/từ chối, hồ sơ học viên kèm file, tài khoản quản trị) thành 1 file để lưu trữ hoặc chuyển sang nơi khác.</p>
         <div class="row-flex">
           <button id="btn-backup">💾 Sao lưu dữ liệu (tải file)</button>
           <div class="field" style="max-width:320px">
@@ -14595,7 +14955,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           const acts = await getActivities(emp.id);
           if (acts.length) activities[emp.id] = acts;
         }
-        const backup = { version: 1, exportedAt: new Date().toISOString(), config: state.config, employees: state.employees, pending: state.pending, activities };
+        const backup = { version: 1, exportedAt: new Date().toISOString(), config: state.config, employees: state.employees, pending: state.pending, activities, approvedLog: state.approvedLog, rejectedLog: state.rejectedLog, trainees: state.trainees, adminUsers: state.adminUsers, rejectedEmployeesLog: state.rejectedEmployeesLog };
         const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -14656,7 +15016,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
       const backup = {
         version: 1, exportedAt: new Date().toISOString(),
-        config: state.config, employees: state.employees, pending: state.pending, activities,
+        config: state.config, employees: state.employees, pending: state.pending, activities, approvedLog: state.approvedLog, rejectedLog: state.rejectedLog, trainees: state.trainees, adminUsers: state.adminUsers, rejectedEmployeesLog: state.rejectedEmployeesLog,
       };
       const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -14679,6 +15039,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         state.employees = backup.employees;
         state.pending = backup.pending || [];
         await saveConfig(); await saveEmployees(); await savePending();
+        // File sao lưu bản mới có thêm: phiếu đã duyệt/từ chối, hồ sơ học viên, tài khoản quản trị.
+        if (Array.isArray(backup.approvedLog)){ state.approvedLog = backup.approvedLog; await saveApprovedLog(); }
+        if (Array.isArray(backup.rejectedLog)){ state.rejectedLog = backup.rejectedLog; await saveRejectedLog(); }
+        if (Array.isArray(backup.adminUsers) && backup.adminUsers.length){ state.adminUsers = backup.adminUsers; await saveAdminUsers(); }
+        if (Array.isArray(backup.rejectedEmployeesLog)){ state.rejectedEmployeesLog = backup.rejectedEmployeesLog; await saveRejectedEmployeesLog(); }
+        if (Array.isArray(backup.trainees)){
+          state.trainees = backup.trainees;
+          for (let i=0; i<backup.trainees.length; i++){
+            status.textContent = `Đang phục hồi hồ sơ học viên… ${i+1}/${backup.trainees.length}`;
+            await saveTrainee(backup.trainees[i]);
+          }
+        }
         const empIds = Object.keys(backup.activities || {});
         for (let i=0; i<empIds.length; i++){
           status.textContent = `Đang phục hồi… ${i+1}/${empIds.length}`;
@@ -14800,7 +15172,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       };
       return;
     }
-    await loadAll();
+    try {
+      await loadAll();
+    } catch(err){
+      console.error('Khởi tạo lỗi:', err);
+      root.innerHTML = `<div style="max-width:620px;margin:60px auto;padding:24px 28px;border:1px solid #ddd7c8;border-radius:10px;background:#fff;font-family:Arial,sans-serif;line-height:1.6">
+        <h3 style="color:#a3271f;margin-top:0">⚠ Chưa kết nối được máy chủ dữ liệu</h3>
+        <p>${String(err && err.message || err).replace(/</g,'&lt;')}</p>
+        <p>Anh/chị kiểm tra kết nối mạng rồi bấm thử lại. Hệ thống đã dừng lại để KHÔNG tự tạo dữ liệu trùng.</p>
+        <button onclick="location.reload()" style="padding:10px 20px;border-radius:6px;border:1px solid #14335c;background:#14335c;color:#fff;font-weight:700;cursor:pointer">🔄 Thử lại</button>
+      </div>`;
+      return;
+    }
     await seedDemoData();
     // Đăng nhập nhanh bằng link trực tiếp (VD: ...?unit=<maKhoa>&pin=<pin>&tab=phancong)
     // để Khoa/Phòng bấm 1 phát vào thẳng màn "Đề nghị phân công", không cần tự tìm/đăng nhập tay.
