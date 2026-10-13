@@ -7816,7 +7816,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <td style="font-size:12.5px">${escHtml(l.createdBy)||'—'}<br>${fmtDate(String(l.createdAt||'').slice(0,10))}</td>
           <td>${l.trangThai==='Đã huỷ' ? '<span class="pill red">Đã huỷ</span>' : '<span class="pill green">Đã ghi nhận</span>'}</td>
           <td style="white-space:nowrap">${l.trangThai==='Đã huỷ'?'':`<button class="small-btn" data-lc-hoso="${i}">📁 Hồ sơ lớp (${(l.files||[]).length} file)</button> <button class="small-btn" data-lc-ingcn="${i}">🖨️ In giấy chứng nhận</button><br><button class="ghost small-btn" data-lc-phuluc="${i}">📝 Phụ lục DS (Word)</button> <button class="ghost small-btn" data-lc-duthao="${i}">📝 Dự thảo QĐ cấp GCN</button><br>`}<button class="ghost small-btn" data-lc-xemds="${i}">📋 Danh sách</button> ${l.trangThai==='Đã huỷ'?'':`<button class="ghost small-btn" data-lc-huy="${i}">🗑️ Huỷ cả lớp</button>`}</td></tr>
-          <tr id="lc-ct-${i}" style="display:none"><td colspan="9"><table><thead><tr><th>STT</th><th>Họ tên</th><th>Ngày sinh</th><th>Khoa/Phòng – Đơn vị</th><th>Vai trò</th><th>Giờ</th><th>Số GCN</th><th></th></tr></thead><tbody>${(l.hoatDong||[]).map((h,j)=>`<tr style="${h.daHuy?'background:#fdf0ef;color:#999;text-decoration:line-through':''}"><td>${j+1}</td><td>${escHtml(h.empName)}</td><td>${h.ngaySinh?fmtDate(h.ngaySinh):''}</td><td>${escHtml(h.ngoaiVien ? h.donViCongTac : h.donViName)}</td><td>${escHtml(h.vaiTro||'')}</td><td>${h.gio}</td><td style="white-space:nowrap">${escHtml(h.soGCN||'')}</td><td style="white-space:nowrap;text-decoration:none">${l.trangThai==='Đã huỷ'?'':(h.daHuy ? `<span class="pill red" title="${escHtml(h.lyDoHuy||'')}">Đã huỷ</span>` : `<a href="#" data-lc-in1="${i}:${j}">🖨️ In</a> &nbsp; <a href="#" data-lc-huy1="${i}:${j}" style="color:var(--red)">✖ Huỷ</a>`)}</td></tr>`).join('')}</tbody></table></td></tr>`).join('')}</tbody></table>`);
+          <tr id="lc-ct-${i}" style="display:none"><td colspan="9"><table><thead><tr><th>STT</th><th>Họ tên</th><th>Ngày sinh</th><th>Khoa/Phòng – Đơn vị</th><th>Vai trò</th><th>Giờ</th><th>Số GCN</th><th></th></tr></thead><tbody>${(l.hoatDong||[]).map((h,j)=>`<tr style="${h.daHuy?'background:#fdf0ef;color:#999;text-decoration:line-through':''}"><td>${j+1}</td><td>${escHtml(h.empName)}</td><td>${h.ngaySinh?fmtDate(h.ngaySinh):''}</td><td>${escHtml(h.ngoaiVien ? h.donViCongTac : h.donViName)}</td><td>${escHtml(h.vaiTro||'')}</td><td>${h.gio}</td><td style="white-space:nowrap">${escHtml(h.soGCN||'')}</td><td style="white-space:nowrap;text-decoration:none">${l.trangThai==='Đã huỷ'?'':(h.daHuy ? `<span class="pill red" title="${escHtml(h.lyDoHuy||'')}">Đã huỷ</span>` : `<a href="#" data-lc-in1="${i}:${j}">🖨️ In</a> &nbsp; <a href="#" data-lc-sua1="${i}:${j}">✏️ Sửa</a> &nbsp; <a href="#" data-lc-huy1="${i}:${j}" style="color:var(--red)">✖ Huỷ</a>`)}</td></tr>`).join('')}</tbody></table></td></tr>`).join('')}</tbody></table>`);
       box.querySelectorAll('[data-lc-ingcn]').forEach(b=> b.onclick = ()=> moInGiayChungNhan(ds[+b.getAttribute('data-lc-ingcn')]));
       box.querySelectorAll('[data-lc-in1]').forEach(a=> a.onclick = ev=>{ ev.preventDefault(); const [i,j] = a.getAttribute('data-lc-in1').split(':').map(Number); moInGiayChungNhan(ds[i], [j]); });
       box.querySelectorAll('[data-lc-phuluc]').forEach(b=> b.onclick = ()=> xuatPhuLucDanhSachGCN(ds[+b.getAttribute('data-lc-phuluc')]));
@@ -7826,6 +7826,15 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       box.querySelectorAll('[data-lc-xemfile]').forEach(a=> a.onclick = async ev=>{ ev.preventDefault(); const l = ds[+a.getAttribute('data-lc-xemfile')]; openEvidenceFilesModal({ bangChungFilesLop: l.files }); });
       // Huỷ 1 người trong lớp (nhập nhầm người, người không đủ điều kiện…): gỡ giờ khỏi hồ sơ người đó,
       // chuyển phiếu sang "Đã từ chối / huỷ", đánh dấu "Đã huỷ" trong danh sách lớp. Số GCN của người đó không cấp lại cho ai khác.
+      box.querySelectorAll('[data-lc-sua1]').forEach(a=> a.onclick = ev=>{
+        ev.preventDefault();
+        const [i,j] = a.getAttribute('data-lc-sua1').split(':').map(Number);
+        moSuaNguoiLop(ds[i], j, async ()=>{
+          await veDanhSachLop();
+          const idx = ds.findIndex(x=> x.id === ds[i].id);
+          const moLai = document.querySelector('#lc-ct-' + (idx >= 0 ? idx : i)); if (moLai) moLai.style.display = '';
+        });
+      });
       box.querySelectorAll('[data-lc-huy1]').forEach(a=> a.onclick = ev=>{
         ev.preventDefault();
         const [i,j] = a.getAttribute('data-lc-huy1').split(':').map(Number);
@@ -7876,6 +7885,148 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         });
       });
     }
+  }
+
+  // ===== Sửa 1 người trong lớp CME đã ghi nhận =====
+  // • Sửa thông tin in trên giấy chứng nhận (họ tên, ngày sinh, chức danh, khoa/đơn vị, số GCN, số giờ).
+  // • Nhầm người: chọn lại đúng nhân viên → phiếu CNKT (và số giờ) được CHUYỂN từ người cũ sang người đúng.
+  // • Chuyển qua lại "nhân viên BV" ↔ "người ngoài viện" (ngoài viện: chỉ cấp GCN, không cộng giờ).
+  function moSuaNguoiLop(lop, j, onDone){
+    const h = (lop.hoatDong||[])[j];
+    if (!h || h.daHuy) return;
+    const cfg = cauHinhGCN();
+    const nvDs = (state.employees||[]).filter(e=> e.trangThaiNhanVien !== 'Chờ duyệt');
+    let empMoi = h.empId ? nvDs.find(e=> e.id === h.empId) || null : null;
+    let ngoai = !!h.ngoaiVien;
+    const overlay = el(`<div class="modal-overlay"><div class="modal" style="max-width:640px">
+      <h3>✏️ Sửa thông tin — ${escHtml(h.empName||'')}${h.soGCN ? ' <span class="muted" style="font-size:13px">(GCN số ' + escHtml(h.soGCN) + ')</span>' : ''}</h3>
+      <div class="row-flex" style="gap:18px;margin-bottom:8px">
+        <label style="white-space:nowrap"><input type="radio" name="sn-loai" value="nv" ${ngoai?'':'checked'} style="width:auto"> Nhân viên Bệnh viện</label>
+        <label style="white-space:nowrap"><input type="radio" name="sn-loai" value="ngoai" ${ngoai?'checked':''} style="width:auto"> Người ngoài viện (chỉ cấp GCN)</label>
+      </div>
+      <div id="sn-khu-nv">
+        <div class="field"><label>Nhân viên trên phần mềm <span class="muted" style="font-weight:normal">— nếu nhập nhầm người, gõ tên để chọn lại đúng người</span></label>
+          <div id="sn-nv-dang" style="font-weight:bold;margin-bottom:6px"></div>
+          <input id="sn-tim" autocomplete="off" placeholder="Gõ tên (có dấu hoặc không dấu) để đổi người…" />
+          <div id="sn-goiy" style="max-height:220px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;display:none;margin-top:4px"></div>
+        </div>
+      </div>
+      <div class="row-flex">
+        <div class="field"><label>Họ tên in trên GCN</label><input id="sn-ten" value="${escHtml(h.empName||'')}" /></div>
+        <div class="field" style="max-width:190px"><label>Ngày sinh</label><input id="sn-ns" type="date" value="${escHtml(h.ngaySinh||'')}" /></div>
+      </div>
+      <div class="row-flex">
+        <div class="field" style="max-width:180px"><label>Chức danh</label><input id="sn-cd" value="${escHtml(h.chucDanh||'')}" /></div>
+        <div class="field" id="sn-khu-khoa"><label>Khoa/Phòng</label><input id="sn-khoa" value="${escHtml(h.donViName||'')}" /></div>
+        <div class="field" id="sn-khu-dv"><label>Đơn vị công tác (người ngoài viện)</label><input id="sn-dv" value="${escHtml(h.ngoaiVien ? (h.donViCongTac||'') : '')}" /></div>
+      </div>
+      <div class="row-flex">
+        <div class="field"><label>Số giấy chứng nhận</label><input id="sn-so" value="${escHtml(h.soGCN||'')}" /></div>
+        <div class="field" style="max-width:150px"><label>Số giờ tín chỉ</label><input id="sn-gio" type="number" min="0" step="0.5" value="${escHtml(String(h.gio ?? ''))}" /></div>
+      </div>
+      <div id="sn-canhbao" class="muted" style="font-size:13px;margin-bottom:8px"></div>
+      <div class="row-flex" style="justify-content:flex-end"><button class="secondary" id="sn-huy">Đóng</button><button id="sn-luu">💾 Lưu thay đổi</button></div>
+    </div></div>`);
+    root.appendChild(overlay);
+    const q = s=> overlay.querySelector(s);
+    const veLoai = ()=>{
+      q('#sn-khu-nv').style.display = ngoai ? 'none' : '';
+      q('#sn-khu-khoa').style.display = ngoai ? 'none' : '';
+      q('#sn-khu-dv').style.display = ngoai ? '' : 'none';
+      q('#sn-nv-dang').innerHTML = empMoi ? escHtml(empMoi.hoTen) + ' <span class="muted" style="font-weight:normal">— ' + escHtml(tenKhoaCua(empMoi)||'Chưa có khoa') + (empMoi.soCCHN ? ' — ' + escHtml(empMoi.soCCHN) : '') + '</span>' + (h.empId && empMoi.id !== h.empId ? ' <span class="pill amber">sẽ chuyển phiếu sang người này</span>' : '') : '<span style="color:var(--red)">Chưa chọn nhân viên</span>';
+      const cb = [];
+      if (!ngoai && h.ngoaiVien) cb.push('Chuyển từ người ngoài viện thành nhân viên BV: sẽ tạo phiếu CNKT và cộng giờ cho nhân viên được chọn.');
+      if (ngoai && !h.ngoaiVien) cb.push('Chuyển thành người ngoài viện: phiếu CNKT và số giờ của lớp này sẽ được gỡ khỏi hồ sơ nhân viên hiện tại.');
+      if (!ngoai && h.empId && empMoi && empMoi.id !== h.empId) cb.push('Nhầm người: phiếu CNKT của lớp này sẽ được gỡ khỏi "' + (h.empName||'') + '" và chuyển sang "' + empMoi.hoTen + '".');
+      q('#sn-canhbao').innerHTML = cb.map(x=> '⚠ ' + escHtml(x)).join('<br>');
+    };
+    overlay.querySelectorAll('[name="sn-loai"]').forEach(r=> r.onchange = ()=>{ ngoai = (overlay.querySelector('[name="sn-loai"]:checked')||{}).value === 'ngoai'; veLoai(); });
+    let hen = null;
+    q('#sn-tim').oninput = ()=>{ clearTimeout(hen); hen = setTimeout(()=>{
+      const tu = khongDau(q('#sn-tim').value).split(' ').filter(Boolean);
+      const gy = q('#sn-goiy');
+      if (!tu.length){ gy.style.display = 'none'; return; }
+      const kq = nvDs.filter(e=>{ const k = khongDau(e.hoTen + ' ' + (e.soCCHN||'')); return tu.every(t=> k.indexOf(t) >= 0); }).slice(0, 12);
+      gy.innerHTML = kq.length ? kq.map(e=>`<div data-sn-id="${e.id}" style="padding:6px 10px;cursor:pointer;border-bottom:1px solid #eef2ef">${escHtml(e.hoTen)} <span class="muted" style="font-size:12.5px">— ${escHtml(tenKhoaCua(e)||'Chưa có khoa')}${e.soCCHN?' — '+escHtml(e.soCCHN):''}${e.ngaySinh?' — '+escHtml(fmtDate(e.ngaySinh)):''}</span></div>`).join('') : '<div class="muted" style="padding:6px 10px">Không có nhân viên nào khớp.</div>';
+      gy.style.display = 'block';
+      gy.querySelectorAll('[data-sn-id]').forEach(d=> d.onclick = ()=>{
+        empMoi = nvDs.find(e=> e.id === d.getAttribute('data-sn-id'));
+        q('#sn-ten').value = empMoi.hoTen || ''; q('#sn-ns').value = empMoi.ngaySinh || ''; q('#sn-cd').value = empMoi.chucDanh || q('#sn-cd').value; q('#sn-khoa').value = tenKhoaCua(empMoi) || '';
+        q('#sn-tim').value = ''; gy.style.display = 'none'; veLoai();
+      });
+    }, 120); };
+    q('#sn-huy').onclick = ()=> overlay.remove();
+    q('#sn-luu').onclick = async ()=>{
+      const ten = q('#sn-ten').value.trim(), so = q('#sn-so').value.trim();
+      const gio = parseFloat(q('#sn-gio').value);
+      if (!ten){ alert('Vui lòng nhập họ tên.'); return; }
+      if (!isFinite(gio) || gio < 0){ alert('Số giờ không hợp lệ.'); return; }
+      if (!ngoai && !empMoi){ alert('Vui lòng chọn nhân viên trên phần mềm (hoặc chọn "Người ngoài viện").'); return; }
+      if (ngoai && !q('#sn-dv').value.trim()){ alert('Vui lòng nhập Đơn vị công tác của người ngoài viện.'); return; }
+      if (so && (lop.hoatDong||[]).some((x,k)=> k !== j && !x.daHuy && String(x.soGCN||'').trim() === so) && !confirm('Số GCN "' + so + '" đã có người khác trong lớp này. Vẫn lưu?')) return;
+      const btn = q('#sn-luu'); btn.disabled = true; btn.textContent = '⏳ Đang lưu…';
+      try {
+        const gioCu = Number(h.gio)||0;
+        const doiNguoi = !ngoai && !h.ngoaiVien && h.empId && empMoi.id !== h.empId;
+        // 1) Gỡ phiếu khỏi người cũ (nhầm người, hoặc chuyển thành ngoài viện)
+        let act = null;
+        if (h.empId && h.actId && (doiNguoi || ngoai)){
+          const acts = await getActivities(h.empId, true);
+          act = acts.find(x=> x.id === h.actId) || null;
+          await saveActivities(h.empId, acts.filter(x=> x.id !== h.actId));
+          invalidateHours(h.empId);
+          if (ngoai){
+            const bo = state.approvedLog.filter(p=> p.id === h.actId);
+            state.approvedLog = state.approvedLog.filter(p=> p.id !== h.actId);
+            bo.forEach(p=> state.rejectedLog.unshift(Object.assign({}, p, { rejectedAt: todayISO(), lyDo: 'Lớp CME "' + lop.tenHoatDong + '": chuyển thành người ngoài viện' })));
+          }
+        }
+        // 2) Gắn phiếu cho người đúng (nhầm người / ngoài viện → nhân viên), hoặc cập nhật phiếu hiện có
+        if (!ngoai){
+          const empId = empMoi.id;
+          const acts = await getActivities(empId, true);
+          let rec = acts.find(x=> x.id === h.actId && !doiNguoi && !h.ngoaiVien);
+          if (!rec){
+            rec = Object.assign({}, act || {
+              id: uid('act'), loaiHinh: h.loaiHinh || lop.loaiHinh, vaiTro: h.vaiTro || lop.vaiTro || 'Học viên',
+              tenHoatDong: h.tenHoatDong || lop.tenHoatDong, donViToChuc: lop.donViToChuc || cfg.tenDayDu,
+              ngayThamGia: h.tuNgay || lop.tuNgay, ngayKetThuc: h.denNgay || lop.denNgay,
+              bangChung: (lop.hoSo && lop.hoSo.soQDCapGCN) ? 'QĐ số ' + lop.hoSo.soQDCapGCN : '',
+              bangChungFilesLop: [], lopCmeId: lop.id, nhapHangLoat: true, trangThai: 'Đã xác nhận', confirmedAt: new Date().toISOString(),
+            });
+            acts.push(rec);
+          }
+          rec.soChungNhanCME = so; rec.soGioTinChi = gio;
+          await saveActivities(empId, acts);
+          invalidateHours(empId);
+          // Sổ theo dõi "Đã duyệt"
+          const kh = tenKhoaCua(empMoi);
+          const cu = state.approvedLog.find(p=> p.id === rec.id);
+          if (cu) Object.assign(cu, rec, { empId, empName: empMoi.hoTen, donViId: empMoi.donViId, donViName: kh });
+          else state.approvedLog.unshift(Object.assign({}, rec, { empId, empName: empMoi.hoTen, donViId: empMoi.donViId, donViName: kh, submittedAt: new Date().toISOString(), nguoiNhap: state.adminUserName || '' }));
+          h.empId = empId; h.actId = rec.id;
+        }
+        await saveApprovedLog(); await saveRejectedLog();
+        // 3) Cập nhật dòng trong danh sách lớp + tổng giờ/số ngoài viện
+        if (h.ngoaiVien && !ngoai){ lop.soNgoaiVien = Math.max(0, (lop.soNgoaiVien||0) - 1); lop.tongGio = (lop.tongGio||0) + gio; }
+        else if (!h.ngoaiVien && ngoai){ lop.soNgoaiVien = (lop.soNgoaiVien||0) + 1; lop.tongGio = Math.max(0, (lop.tongGio||0) - gioCu); }
+        else if (!ngoai){ lop.tongGio = Math.max(0, (lop.tongGio||0) - gioCu + gio); }
+        if (ngoai){ h.empId = ''; h.actId = ''; }
+        h.ngoaiVien = ngoai; h.empName = ten; h.ngaySinh = q('#sn-ns').value || ''; h.chucDanh = q('#sn-cd').value.trim();
+        h.donViName = ngoai ? '' : q('#sn-khoa').value.trim();
+        h.donViCongTac = ngoai ? q('#sn-dv').value.trim() : cfg.tenDayDu;
+        h.soGCN = so; h.gio = gio;
+        h.lichSuSua = (h.lichSuSua||[]).concat([{ luc: new Date().toISOString(), boi: state.adminUserName || '' }]);
+        await window.storage.set('cme_lop:' + lop.id, JSON.stringify(lop), true);
+        overlay.remove();
+        if (onDone) await onDone();
+        alert('✅ Đã lưu thay đổi cho "' + ten + '".');
+      } catch(err){
+        alert('⚠ Chưa lưu được (lỗi mạng hoặc máy chủ): ' + (err && err.message || err) + '\nVui lòng thử lại.');
+        btn.disabled = false; btn.textContent = '💾 Lưu thay đổi';
+      }
+    };
+    veLoai();
   }
 
   function renderAdminApprove(content){
