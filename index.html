@@ -7402,7 +7402,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
     const c = st.chung;
     const htHienTai = ()=> findLoaiHinhCNKT(c.loaiHinh) || null;
+    // Thu gọn/mở từng khối: mặc định mở Bước 1, Bước 2 và Danh sách lớp; thu gọn phần giới thiệu và Thống kê.
+    setTimeout(()=> thuGonKhoi(wrap, { tienTo: 'lc-k', khoaTrangThai: 'lopCmeMo', thanhCongCu: '#lc-thanh-cong-cu', moMacDinh: [1, 2, 4] }), 0);
     wrap.innerHTML = `
+      <div class="row-flex" id="lc-thanh-cong-cu" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span class="muted">Bấm vào tên từng mục để mở/thu gọn.</span>
+        <span><button type="button" class="ghost small-btn" data-cd="mo">▾ Mở tất cả</button> <button type="button" class="ghost small-btn" data-cd="dong">▸ Thu gọn tất cả</button></span>
+      </div>
       <div class="card">
         <h3 style="margin-top:0">📚 Nhập lớp CME hàng loạt (lớp/hội nghị do Bệnh viện – Phòng CĐT tổ chức)</h3>
         <p class="muted" style="margin-top:0">Khai báo thông tin chung của lớp 1 lần, tải danh sách người tham dự bằng file Excel theo mẫu, đính kèm Quyết định/ảnh CME. Giờ tín chỉ được ghi nhận <b>Đã xác nhận</b> ngay cho từng người — khoa không cần nhập lại, không qua bước Chờ duyệt.</p>
@@ -7441,7 +7447,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         <span class="muted" id="lc-excel-ten" style="margin-left:8px">${escHtml(st.tenFileExcel)}</span>
         <div id="lc-xem-truoc" style="margin-top:12px"></div>
       </div>
-      <div class="card" id="lc-ds-lop"><h3 style="margin-top:0">Các lớp đã nhập hàng loạt</h3><div class="muted">Đang tải…</div></div>
+      <div class="card"><h3 style="margin-top:0">📊 Thống kê cấp giấy chứng nhận CME</h3><div id="lc-thong-ke"><div class="muted">Đang tải…</div></div></div>
+      <div class="card"><h3 style="margin-top:0">Các lớp đã nhập hàng loạt <span id="lc-ds-dem"></span></h3><div id="lc-ds-lop"><div class="muted">Đang tải…</div></div></div>
     `;
     const $ = id => wrap.querySelector('#'+id);
     $('lc-tai-mau').onclick = ()=> taiMauExcelLopCme().catch(err=> alert('Không tạo được file mẫu: ' + err.message));
@@ -7803,10 +7810,12 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       try {
         if (window.storage.getMany) ds = (await window.storage.getMany('cme_lop:')).map(x=>{ try { return JSON.parse(x.value); } catch(e){ return null; } }).filter(Boolean);
         else { const l = await window.storage.list('cme_lop:', true); for (const k of (l.keys||[])){ try { ds.push(JSON.parse((await window.storage.get(k,true)).value)); } catch(e){} } }
-      } catch(e){ box.innerHTML = '<h3 style="margin-top:0">Các lớp đã nhập hàng loạt</h3><p class="muted">Không tải được danh sách lớp.</p>'; return; }
+      } catch(e){ box.innerHTML = '<p class="muted">Không tải được danh sách lớp.</p>'; return; }
       ds.sort((a,b)=> String(b.createdAt).localeCompare(String(a.createdAt)));
       ds.forEach(l=> _lopCache.set(l.id, l));
-      box.innerHTML = `<h3 style="margin-top:0">Các lớp đã nhập hàng loạt (${ds.length})</h3>` + (!ds.length ? '<p class="muted">Chưa có lớp nào.</p>' : `
+      try { veThongKeLop(ds); } catch(e){ console.error(e); }
+      const dem = document.getElementById('lc-ds-dem'); if (dem) dem.textContent = '(' + ds.length + ')';
+      box.innerHTML = (!ds.length ? '<p class="muted">Chưa có lớp nào.</p>' : `
         <table><thead><tr><th style="width:44px;text-align:center">STT</th><th>Tên lớp / hoạt động</th><th>Ngày</th><th>Số người</th><th>Giờ đã cộng</th><th>Hồ sơ lớp</th><th>Người nhập</th><th>Trạng thái</th><th></th></tr></thead>
         <tbody>${ds.map((l,i)=>`<tr>
           <td style="text-align:center;font-weight:600">${i+1}</td>
@@ -7891,6 +7900,87 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   // • Sửa thông tin in trên giấy chứng nhận (họ tên, ngày sinh, chức danh, khoa/đơn vị, số GCN, số giờ).
   // • Nhầm người: chọn lại đúng nhân viên → phiếu CNKT (và số giờ) được CHUYỂN từ người cũ sang người đúng.
   // • Chuyển qua lại "nhân viên BV" ↔ "người ngoài viện" (ngoài viện: chỉ cấp GCN, không cộng giờ).
+  // ===== Thống kê cấp giấy chứng nhận CME: trong viện / ngoài viện, theo lớp, theo khoa, theo đơn vị ngoài =====
+  // Chỉ tính lớp chưa huỷ và người chưa bị huỷ khỏi lớp. Lọc theo ngày bắt đầu lớp.
+  const _tkLop = { tu: '', den: '' };
+  function veThongKeLop(dsLop){
+    const box = document.getElementById('lc-thong-ke');
+    if (!box) return;
+    const cfg = cauHinhGCN();
+    const lops = (dsLop||[]).filter(l=> l.trangThai !== 'Đã huỷ')
+      .filter(l=> (!_tkLop.tu || String(l.tuNgay||'') >= _tkLop.tu) && (!_tkLop.den || String(l.tuNgay||'') <= _tkLop.den))
+      .slice().sort((a,b)=> String(a.tuNgay||'').localeCompare(String(b.tuNgay||'')));
+    const theoLop = [], theoKhoa = {}, theoDonVi = {};
+    let tongTrong = 0, tongNgoai = 0, tongGio = 0;
+    lops.forEach(l=>{
+      const ds = (l.hoatDong||[]).filter(h=> !h.daHuy);
+      const trong = ds.filter(h=> !h.ngoaiVien), ngoai = ds.filter(h=> h.ngoaiVien);
+      const gio = trong.reduce((t,h)=> t + (Number(h.gio)||0), 0);
+      tongTrong += trong.length; tongNgoai += ngoai.length; tongGio += gio;
+      theoLop.push({ ten: l.tenHoatDong, loai: l.loaiHinh, tu: l.tuNgay, den: l.denNgay, trong: trong.length, ngoai: ngoai.length, gio, soQD: (l.hoSo||{}).soQDCapGCN || '' });
+      trong.forEach(h=>{ const k = h.donViName || 'Chưa rõ khoa'; const o = theoKhoa[k] = theoKhoa[k] || { nguoi: 0, gio: 0 }; o.nguoi++; o.gio += Number(h.gio)||0; });
+      ngoai.forEach(h=>{ const k = (h.donViCongTac||'').trim() || 'Chưa rõ đơn vị'; theoDonVi[k] = (theoDonVi[k]||0) + 1; });
+    });
+    const khoaArr = Object.entries(theoKhoa).sort((a,b)=> b[1].nguoi - a[1].nguoi || a[0].localeCompare(b[0],'vi'));
+    const dvArr = Object.entries(theoDonVi).sort((a,b)=> b[1] - a[1] || a[0].localeCompare(b[0],'vi'));
+    const tong = tongTrong + tongNgoai;
+    const pt = n=> tong ? ' (' + (n*100/tong).toLocaleString('vi-VN',{maximumFractionDigits:1}) + '%)' : '';
+    const o = (nhan, so, mau)=> `<div style="flex:1;min-width:140px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:#fff"><div class="muted" style="font-size:12.5px">${nhan}</div><div style="font-size:22px;font-weight:bold;color:${mau||'var(--navy)'}">${so}</div></div>`;
+    box.innerHTML = `<div class="row-flex" style="align-items:flex-end;gap:10px;margin-bottom:10px">
+        <div class="field" style="margin:0;max-width:180px"><label>Lớp bắt đầu từ ngày</label><input type="date" id="tk-tu" value="${_tkLop.tu}"></div>
+        <div class="field" style="margin:0;max-width:180px"><label>đến ngày</label><input type="date" id="tk-den" value="${_tkLop.den}"></div>
+        <button type="button" class="small-btn" id="tk-loc">🔎 Lọc</button>
+        <button type="button" class="ghost small-btn" id="tk-nam">Năm ${new Date().getFullYear()}</button>
+        <button type="button" class="ghost small-btn" id="tk-xoa">Tất cả</button>
+        <button type="button" class="secondary small-btn" id="tk-excel">📊 Xuất Excel</button>
+      </div>
+      <div class="row-flex" style="gap:10px;margin-bottom:12px">
+        ${o('Số lớp', lops.length)}
+        ${o('Tổng số GCN đã cấp', tong.toLocaleString('vi-VN'))}
+        ${o('Trong viện' + pt(tongTrong), tongTrong.toLocaleString('vi-VN'), 'var(--green)')}
+        ${o('Ngoài viện' + pt(tongNgoai), tongNgoai.toLocaleString('vi-VN'), 'var(--amber)')}
+        ${o('Giờ tín chỉ đã cộng (trong viện)', tongGio.toLocaleString('vi-VN'))}
+      </div>
+      ${!lops.length ? '<p class="muted">Không có lớp nào trong khoảng thời gian này.</p>' : `
+      <div style="overflow-x:auto"><table><thead><tr><th>STT</th><th>Lớp</th><th>Ngày</th><th>QĐ cấp GCN</th><th>Trong viện</th><th>Ngoài viện</th><th>Tổng GCN</th><th>Giờ đã cộng</th></tr></thead><tbody>
+        ${theoLop.map((x,i)=>`<tr><td>${i+1}</td><td>${escHtml(x.ten)}</td><td style="white-space:nowrap">${fmtDateRange(x.tu, x.den)}</td><td style="white-space:nowrap">${escHtml(x.soQD)||'—'}</td><td>${x.trong}</td><td>${x.ngoai}</td><td><b>${x.trong + x.ngoai}</b></td><td>${x.gio.toLocaleString('vi-VN')}</td></tr>`).join('')}
+        <tr style="font-weight:bold;background:#f3f7f4"><td colspan="4">Tổng cộng</td><td>${tongTrong}</td><td>${tongNgoai}</td><td>${tong}</td><td>${tongGio.toLocaleString('vi-VN')}</td></tr>
+      </tbody></table></div>
+      <details style="margin-top:10px"><summary style="cursor:pointer;font-weight:bold">Trong viện theo Khoa/Phòng (${khoaArr.length} khoa)</summary>
+        <div style="overflow-x:auto"><table><thead><tr><th>STT</th><th>Khoa/Phòng</th><th>Số lượt cấp GCN</th><th>Giờ tín chỉ</th></tr></thead><tbody>
+        ${khoaArr.map(([k,v],i)=>`<tr><td>${i+1}</td><td>${escHtml(k)}</td><td>${v.nguoi}</td><td>${v.gio.toLocaleString('vi-VN')}</td></tr>`).join('')}</tbody></table></div></details>
+      <details style="margin-top:6px"><summary style="cursor:pointer;font-weight:bold">Ngoài viện theo đơn vị (${dvArr.length} đơn vị)</summary>
+        <div style="overflow-x:auto"><table><thead><tr><th>STT</th><th>Đơn vị công tác</th><th>Số GCN</th></tr></thead><tbody>
+        ${dvArr.map(([k,v],i)=>`<tr><td>${i+1}</td><td>${escHtml(k)}</td><td>${v}</td></tr>`).join('')}</tbody></table></div></details>`}`;
+    const ve = ()=> veThongKeLop(dsLop);
+    box.querySelector('#tk-loc').onclick = ()=>{ _tkLop.tu = box.querySelector('#tk-tu').value; _tkLop.den = box.querySelector('#tk-den').value; ve(); };
+    box.querySelector('#tk-nam').onclick = ()=>{ const y = new Date().getFullYear(); _tkLop.tu = y + '-01-01'; _tkLop.den = y + '-12-31'; ve(); };
+    box.querySelector('#tk-xoa').onclick = ()=>{ _tkLop.tu = ''; _tkLop.den = ''; ve(); };
+    box.querySelector('#tk-excel').onclick = ()=>{
+      if (typeof XLSX === 'undefined'){ alert('Chưa tải được thư viện Excel.'); return; }
+      const kyTK = (_tkLop.tu || _tkLop.den) ? 'Lớp bắt đầu từ ' + (_tkLop.tu ? fmtDate(_tkLop.tu) : '…') + ' đến ' + (_tkLop.den ? fmtDate(_tkLop.den) : '…') : 'Tất cả các lớp';
+      const wb = XLSX.utils.book_new();
+      const s1 = [[cfg.tenDayDu.toUpperCase()], ['THỐNG KÊ CẤP GIẤY CHỨNG NHẬN CẬP NHẬT KIẾN THỨC Y KHOA LIÊN TỤC'], [kyTK], [],
+        ['STT','Lớp','Hình thức','Từ ngày','Đến ngày','QĐ cấp GCN','Trong viện','Ngoài viện','Tổng GCN','Giờ tín chỉ đã cộng']]
+        .concat(theoLop.map((x,i)=> [i+1, x.ten, x.loai, fmtDate(x.tu), fmtDate(x.den||x.tu), x.soQD, x.trong, x.ngoai, x.trong + x.ngoai, x.gio]))
+        .concat([['','Tổng cộng','','','','', tongTrong, tongNgoai, tong, tongGio]]);
+      const w1 = XLSX.utils.aoa_to_sheet(s1); w1['!cols'] = [{wch:5},{wch:48},{wch:30},{wch:12},{wch:12},{wch:18},{wch:11},{wch:11},{wch:10},{wch:14}];
+      XLSX.utils.book_append_sheet(wb, w1, 'Theo lớp');
+      const w2 = XLSX.utils.aoa_to_sheet([['STT','Khoa/Phòng','Số lượt cấp GCN','Giờ tín chỉ']].concat(khoaArr.map(([k,v],i)=> [i+1, k, v.nguoi, v.gio])).concat([['','Tổng cộng', tongTrong, tongGio]]));
+      w2['!cols'] = [{wch:5},{wch:40},{wch:16},{wch:12}];
+      XLSX.utils.book_append_sheet(wb, w2, 'Trong viện theo khoa');
+      const w3 = XLSX.utils.aoa_to_sheet([['STT','Đơn vị công tác','Số GCN']].concat(dvArr.map(([k,v],i)=> [i+1, k, v])).concat([['','Tổng cộng', tongNgoai]]));
+      w3['!cols'] = [{wch:5},{wch:50},{wch:10}];
+      XLSX.utils.book_append_sheet(wb, w3, 'Ngoài viện theo đơn vị');
+      // Danh sách chi tiết từng người
+      const ct = [['STT','Lớp','Họ và tên','Ngày sinh','Trong/Ngoài viện','Khoa/Phòng','Đơn vị công tác','Số GCN','Giờ']];
+      let n = 0;
+      lops.forEach(l=> (l.hoatDong||[]).filter(h=> !h.daHuy).forEach(h=> ct.push([++n, l.tenHoatDong, h.empName||'', h.ngaySinh ? fmtDate(h.ngaySinh) : '', h.ngoaiVien ? 'Ngoài viện' : 'Trong viện', h.ngoaiVien ? '' : (h.donViName||''), h.ngoaiVien ? (h.donViCongTac||'') : cfg.tenDayDu, h.soGCN||'', h.ngoaiVien ? 0 : (Number(h.gio)||0)])));
+      const w4 = XLSX.utils.aoa_to_sheet(ct); w4['!cols'] = [{wch:5},{wch:40},{wch:26},{wch:12},{wch:14},{wch:28},{wch:36},{wch:22},{wch:7}];
+      XLSX.utils.book_append_sheet(wb, w4, 'Chi tiết');
+      XLSX.writeFile(wb, 'Thong_ke_cap_GCN_CME' + (_tkLop.tu ? '_tu_' + _tkLop.tu : '') + (_tkLop.den ? '_den_' + _tkLop.den : '') + '.xlsx');
+    };
+  }
   function moSuaNguoiLop(lop, j, onDone){
     const h = (lop.hoatDong||[])[j];
     if (!h || h.daHuy) return;
@@ -16444,14 +16534,18 @@ https://github.com/nodeca/pako/blob/main/LICENSE
 
   // Màn Cài đặt dài: biến mỗi khối (card có tiêu đề h3) thành khối thu gọn/mở được, mặc định THU GỌN;
   // nhớ trạng thái mở trong phiên làm việc (state.caiDatMo). Khối "Giấy chứng nhận CME" tự quản lý riêng.
-  function thuGonKhoiCaiDat(content){
-    state.caiDatMo = state.caiDatMo || {};
+  function thuGonKhoiCaiDat(content){ thuGonKhoi(content, { tienTo: 'cd-', khoaTrangThai: 'caiDatMo', thanhCongCu: '#cd-thanh-cong-cu' }); }
+  // Dùng chung: biến các khối .card (có h3 đầu tiên) con trực tiếp của container thành khối thu gọn/mở.
+  // opts.moMacDinh: danh sách thứ tự khối (0,1,2…) mặc định MỞ; còn lại mặc định thu gọn. Trạng thái nhớ trong state[opts.khoaTrangThai].
+  function thuGonKhoi(content, opts){
+    const tienTo = opts.tienTo, kho = state[opts.khoaTrangThai] = state[opts.khoaTrangThai] || {};
+    const moMacDinh = new Set(opts.moMacDinh || []);
     let i = 0;
     Array.from(content.children).forEach(card=>{
       if (!card.classList || !card.classList.contains('card') || card.tagName === 'DETAILS') return;
       const h3 = card.firstElementChild;
       if (!h3 || h3.tagName !== 'H3') return;
-      const id = 'cd-' + (i++);
+      const so = i++, id = tienTo + so;
       const d = document.createElement('details');
       d.className = card.className; d.id = id; d.setAttribute('style', card.getAttribute('style') || '');
       const sm = document.createElement('summary'); sm.style.cursor = 'pointer';
@@ -16460,13 +16554,13 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const than = document.createElement('div'); than.style.marginTop = '12px';
       while (card.firstChild) than.appendChild(card.firstChild);
       d.appendChild(than);
-      d.open = !!state.caiDatMo[id];
-      d.addEventListener('toggle', ()=>{ state.caiDatMo[id] = d.open; });
+      d.open = (id in kho) ? !!kho[id] : moMacDinh.has(so);
+      d.addEventListener('toggle', ()=>{ kho[id] = d.open; });
       card.replaceWith(d);
     });
-    const tb = content.querySelector('#cd-thanh-cong-cu');
+    const tb = content.querySelector(opts.thanhCongCu);
     if (tb){
-      const tatCa = ()=> content.querySelectorAll('details.card[id^="cd-"]');
+      const tatCa = ()=> content.querySelectorAll('details.card[id^="' + tienTo + '"]');
       tb.querySelector('[data-cd="mo"]').onclick = ()=> tatCa().forEach(d=>{ d.open = true; });
       tb.querySelector('[data-cd="dong"]').onclick = ()=> tatCa().forEach(d=>{ d.open = false; });
     }
