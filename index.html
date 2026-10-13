@@ -4190,6 +4190,17 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     sorted.forEach(a=>{
       const files = getRecordEvidenceFiles(a).filter(f=> f.dataUrl);
       const subtitleBase = [a.loaiHinh, fmtDateRange(a.ngayThamGia, a.ngayKetThuc), a.soChungNhanCME? 'Số: '+a.soChungNhanCME : '', '['+a._trangThai+']'].filter(Boolean).join(' — ');
+      // Hoạt động nhập từ lớp CME hàng loạt: giấy chứng nhận do phần mềm tạo (không phải file tải lên) —
+      // đưa vào sổ làm TRANG ĐẦU của hoạt động, trước các file hồ sơ lớp (KH, QĐ, Phụ lục…).
+      const lopGcn = a.lopCmeId ? _lopCache.get(a.lopCmeId) : null;
+      if (lopGcn && lopGcn.trangThai !== 'Đã huỷ'){
+        const jGcn = (lopGcn.hoatDong||[]).findIndex(h=> h.actId === a.id && !h.daHuy);
+        if (jGcn >= 0){
+          pages.push({ type:'gcn', lop: lopGcn, j: jGcn, nguoi: nguoiCuaLopDayDu(lopGcn, lopGcn.hoatDong[jGcn]), name: 'Giấy chứng nhận',
+            title: a.tenHoatDong || lopGcn.tenHoatDong || '(Không có tên hoạt động)',
+            subtitle: subtitleBase + ' — Giấy chứng nhận', trangThai: a._trangThai });
+        }
+      }
       files.forEach((f,fi)=>{
         pages.push({
           dataUrl: f.dataUrl, type: f.type, name: f.name,
@@ -4238,7 +4249,9 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     </div></div>`);
     root.appendChild(overlay);
     function renderThumbs(){
-      overlay.querySelector('#cb-thumbs').innerHTML = visiblePages.map((p,i)=> p.type==='pdf'
+      overlay.querySelector('#cb-thumbs').innerHTML = visiblePages.map((p,i)=> p.type==='gcn'
+        ? `<div data-cb-thumb="${i}" title="Giấy chứng nhận — ${escHtml(p.title)}" style="flex:0 0 auto;width:46px;height:46px;border-radius:4px;background:#fff8e6;border:1px solid #e3c77a;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px">🎓</div>`
+        : p.type==='pdf'
         ? `<div data-cb-thumb="${i}" title="${p.title}" style="flex:0 0 auto;width:46px;height:46px;border-radius:4px;background:#eee;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px">📄</div>`
         : `<img data-cb-thumb="${i}" title="${p.title}" src="${p.dataUrl}" style="flex:0 0 auto;width:46px;height:46px;object-fit:cover;border-radius:4px;cursor:pointer" />`
       ).join('');
@@ -4270,11 +4283,22 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     });
     function renderPage(){
       const p = visiblePages[idx];
+      if (p.type === 'gcn'){
+        // Xem trước giấy chứng nhận A4 dọc (194×281mm ≈ 733×1062px) thu nhỏ vừa khung sổ.
+        const tl = cbZoomed ? 0.64 : 0.34, W = 733, H = 1062;
+        overlay.querySelector('#cb-pageimg').innerHTML = `<div style="width:${Math.round(W*tl)}px;height:${Math.round(H*tl)}px;overflow:hidden;margin:0 auto;box-shadow:0 2px 12px rgba(0,0,0,.18);background:#fff;border-radius:4px"><iframe id="cb-gcn" style="width:${W}px;height:${H}px;border:0;transform:scale(${tl});transform-origin:0 0;pointer-events:none"></iframe></div><div style="margin-top:10px"><button type="button" class="small-btn" id="cb-gcn-in">🖨️ In giấy chứng nhận này</button></div>`;
+        const cfgG = cauHinhGCN(), hsG = p.lop.hoSo || {};
+        const nkG = cfgG.nguoiKy.find(n=> n.macDinh) || cfgG.nguoiKy[0];
+        overlay.querySelector('#cb-gcn').srcdoc = htmlTrangInGCN(p.lop, [p.nguoi], { nguoiKy: nkG, ngayKy: hsG.ngayQDCapGCN || '', khung: true, chuKy: false, dau: false })
+          .replace('</head>', '<style>.thanh{display:none!important}body{background:#fff!important;overflow:hidden}.gcn{margin:0!important}</style></head>');
+        overlay.querySelector('#cb-gcn-in').onclick = ()=> moInGiayChungNhan(p.lop, [p.j]);
+      } else {
       const imgHtml = p.type === 'pdf'
         ? `<div style="padding:50px 20px;color:var(--navy)"><div style="font-size:40px">📄</div><p style="font-family:Arial,sans-serif;margin:6px 0 14px">File PDF: ${p.name||''}</p><a href="${p.dataUrl}" download="${p.name||'tai-lieu.pdf'}" target="_blank"><button type="button">Mở / Tải file PDF</button></a></div>`
         : `<img id="cb-img" src="${p.dataUrl}" style="max-width:100%;max-height:${cbZoomed?'72vh':'380px'};border-radius:6px;box-shadow:0 2px 12px rgba(0,0,0,.18);background:#fff;cursor:zoom-in" title="Bấm để phóng to" />`;
       overlay.querySelector('#cb-pageimg').innerHTML = imgHtml;
       if (p.type !== 'pdf') overlay.querySelector('#cb-img').onclick = ()=> openFilePreviewModal(p.dataUrl, p.type, p.name);
+      }
       overlay.querySelector('#cb-caption').textContent = p.title;
       overlay.querySelector('#cb-sub').textContent = p.subtitle;
       overlay.querySelector('#cb-counter').textContent = 'Trang ' + (idx+1) + ' / ' + visiblePages.length;
@@ -4290,6 +4314,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     overlay.querySelector('#cb-next').onclick = goNext;
     overlay.querySelector('#cb-print').onclick = ()=>{
       const p = visiblePages[idx];
+      if (p.type === 'gcn') return moInGiayChungNhan(p.lop, [p.j]);
       printAttachedFile(p.dataUrl, p.type, p.name);
     };
     function keyHandler(e){
@@ -4315,6 +4340,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       stage.style.minHeight = cbZoomed ? '75vh' : '400px';
       const img = overlay.querySelector('#cb-img');
       if (img) img.style.maxHeight = cbZoomed ? '72vh' : '380px';
+      if (visiblePages[idx] && visiblePages[idx].type === 'gcn') renderPage();
       e.target.textContent = cbZoomed ? '↙️ Thu nhỏ' : '🔍+ Phóng to';
     };
     renderThumbs();
@@ -6647,8 +6673,8 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
   function moInGiayChungNhan(lop, chiSo){
     const cfg = cauHinhGCN();
-    const tatCa = (lop.hoatDong||[]).map(h=> nguoiCuaLopDayDu(lop, h));
-    const ds = chiSo ? chiSo.map(i=> tatCa[i]).filter(Boolean) : tatCa;
+    const tatCa = (lop.hoatDong||[]).map(h=> h.daHuy ? null : nguoiCuaLopDayDu(lop, h));
+    const ds = chiSo ? chiSo.map(i=> tatCa[i]).filter(Boolean) : tatCa.filter(Boolean);
     const thieuSo = ds.filter(p=> !p.soGCN).length;
     const nkMacDinh = cfg.nguoiKy.find(n=>n.macDinh) || cfg.nguoiKy[0];
     const overlay = el(`<div class="modal-overlay"><div class="modal" style="max-width:96vw;width:96vw;max-height:95vh;display:flex;flex-direction:column">
@@ -6682,7 +6708,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
   }
   function bodyPhuLucDanhSachGCN(lop){
     const cfg = cauHinhGCN();
-    const ds = (lop.hoatDong||[]).map(h=> nguoiCuaLopDayDu(lop, h));
+    const ds = (lop.hoatDong||[]).filter(h=> !h.daHuy).map(h=> nguoiCuaLopDayDu(lop, h));
     const nhom = [];
     ds.forEach(p=>{ let g = nhom.find(x=> x.ten === p.nhom); if (!g){ g = { ten: p.nhom, ds: [] }; nhom.push(g); } g.ds.push(p); });
     const thang = String(lop.tuNgay||todayISO()).slice(5,7), nam = String(lop.tuNgay||todayISO()).slice(0,4);
@@ -6877,7 +6903,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     const cfg = cauHinhGCN(), hs = lop.hoSo || {};
     const nk = cfg.nguoiKy.find(n=>n.macDinh) || cfg.nguoiKy[0];
     const ten = escHtml(lop.tenHoatDong), nam = String(lop.tuNgay||todayISO()).slice(0,4);
-    const ds = (lop.hoatDong||[]).map(h=> nguoiCuaLopDayDu(lop, h));
+    const ds = (lop.hoatDong||[]).filter(h=> !h.daHuy).map(h=> nguoiCuaLopDayDu(lop, h));
     // Tóm tắt Điều 1 theo từng nhóm/đợt lớp
     const nhom = [];
     ds.forEach(p=>{ let g = nhom.find(x=> x.ten === p.nhom); if (!g){ g = { ten:p.nhom, gio:new Set(), tiet:new Set(), ngay:new Set() }; nhom.push(g); } g.gio.add(soGioHienThi(p.gio)); const st = soTietCuaNguoi(lop, p); if (st) g.tiet.add(String(st)); g.ngay.add(p.tuNgay === p.denNgay || !p.denNgay ? 'ngày ' + ngayVN(p.tuNgay) : 'từ ngày ' + ngayVN(p.tuNgay) + ' đến ngày ' + ngayVN(p.denNgay)); });
@@ -7481,7 +7507,6 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       const soLoi = st.dong.filter(d=> d._loi.length).length, soTrung = st.dong.filter(d=> d._trung).length;
       const nvOpts = (state.employees||[]).filter(e=>e.trangThaiNhanVien!=='Chờ duyệt').slice().sort((a,b)=> a.hoTen.localeCompare(b.hoTen,'vi'));
       box.innerHTML = `
-        <datalist id="lc-ds-nv">${nvOpts.map(e=>`<option value="${escHtml(nhanNhanVienLopCme(e))}"></option>`).join('')}</datalist>
         <p><b>${st.dong.length}</b> dòng — <span style="color:var(--green)">✅ ${hopLe.length} sẽ ghi nhận (${tongGio.toLocaleString('vi-VN')} giờ)</span>${soTrung ? ` — <span style="color:var(--amber)">⚠ ${soTrung} trùng (tự bỏ chọn)</span>` : ''}${soLoi ? ` — <span style="color:var(--red)">❌ ${soLoi} cần xử lý</span>` : ''}</p>
         <div style="overflow-x:auto"><table>
           <thead><tr><th><input type="checkbox" id="lc-chon-het" style="width:auto" ${hopLe.length && hopLe.length===st.dong.filter(d=>!d._loi.length).length?'checked':''}></th><th>Dòng</th><th>Họ tên (Excel)</th><th>Nhân viên trên phần mềm</th><th>Hình thức / Vai trò</th><th>Ngày</th><th>Giờ</th><th>Số CN CME</th><th>File riêng</th><th>Kiểm tra</th></tr></thead>
@@ -7493,7 +7518,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
               <td>${d.dong}</td>
               <td>${escHtml(d.hoTen)}${d.soCCHN?`<br><span class="muted" style="font-size:12px">${escHtml(d.soCCHN)}</span>`:''}${d.khoa?`<br><span class="muted" style="font-size:12px">${escHtml(d.khoa)}</span>`:''}</td>
               <td style="min-width:230px">${d.ngoaiVien ? `<span class="pill amber">Ngoài viện</span> ${escHtml(d.donViCongTac)}<br><span class="muted" style="font-size:12px">Chỉ cấp giấy chứng nhận, không cộng giờ</span> <a href="#" data-lc-trongvien="${i}" style="font-size:12px">là nhân viên BV?</a>` : (emp ? `${escHtml(emp.hoTen)}<br><span class="muted" style="font-size:12px">${escHtml(tenKhoaCua(emp))} · khớp theo ${escHtml(d.cachKhop)}</span> <a href="#" data-lc-doi="${i}" style="font-size:12px">đổi</a>` : '')}
-                <div ${(emp && !d._doi) || d.ngoaiVien ? 'style="display:none"' : ''}><input list="lc-ds-nv" data-lc-nv="${i}" placeholder="Gõ tên để chọn nhân viên…" style="min-width:220px" /><br><a href="#" data-lc-ngoai="${i}" style="font-size:12px">hoặc ghi là người ngoài viện</a></div></td>
+                <div ${(emp && !d._doi) || d.ngoaiVien ? 'style="display:none"' : ''}><input data-lc-nv="${i}" autocomplete="off" placeholder="Gõ tên để chọn nhân viên…" style="min-width:220px" /><br><a href="#" data-lc-ngoai="${i}" style="font-size:12px">hoặc ghi là người ngoài viện</a></div></td>
               <td>${escHtml(d._kq.loaiHinh)}${d._kq.vaiTro?`<br><span class="muted" style="font-size:12px">${escHtml(d._kq.vaiTro)}</span>`:''}</td>
               <td style="white-space:nowrap">${fmtDateRange(d._kq.tuNgay, d._kq.denNgay)}</td>
               <td>${isFinite(d._kq.gio) ? d._kq.gio : '—'}</td>
@@ -7523,12 +7548,56 @@ https://github.com/nodeca/pako/blob/main/LICENSE
         d.ngoaiVien = false; const k = khopNhanVienLopCme(d); d.empId = k.emp ? k.emp.id : ''; d.cachKhop = k.cach; d._doi = !k.emp; d._chonTuDong = true;
         await kiemTraLai();
       });
-      box.querySelectorAll('[data-lc-nv]').forEach(inp=> inp.onchange = async ()=>{
+      // Ô chọn nhân viên: gợi ý tự viết (nhẹ hơn <datalist> 1.400 dòng — trước đây gõ rất chậm).
+      // Lọc theo từng chữ (không dấu), ưu tiên người cùng khoa với dòng Excel, hiện tối đa 15 gợi ý.
+      if (!st._nvIdx || st._nvIdxNguon !== state.employees){
+        st._nvIdx = nvOpts.map(e=>({ e, nhan: nhanNhanVienLopCme(e), key: khongDau(e.hoTen + ' ' + (e.soCCHN||'')), khoa: tenKhoaCua(e) }));
+        st._nvIdxNguon = state.employees;
+      }
+      let goiY = document.getElementById('lc-goi-y');
+      if (!goiY){ goiY = document.createElement('div'); goiY.id = 'lc-goi-y'; goiY.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1px solid #c9d3cc;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.15);max-height:340px;overflow-y:auto;display:none;font-size:14px'; document.body.appendChild(goiY); }
+      const anGoiY = ()=>{ goiY.style.display = 'none'; goiY._inp = null; };
+      if (!goiY._ganCuon){ goiY._ganCuon = true; window.addEventListener('scroll', ()=>{ if (goiY._inp){ goiY.style.display = 'none'; goiY._inp = null; } }, { passive:true, capture:true }); }
+      const chonNV = async (inp, emp)=>{
+        anGoiY();
         const d = st.dong[+inp.getAttribute('data-lc-nv')];
-        const emp = nvOpts.find(e=> nhanNhanVienLopCme(e) === inp.value);
-        if (!emp){ alert('Vui lòng chọn đúng 1 nhân viên trong danh sách gợi ý.'); return; }
         d.empId = emp.id; d.cachKhop = 'chọn tay'; d._doi = false; d._chonTuDong = true;
         await kiemTraLai();
+      };
+      const loc = (inp)=>{
+        const d = st.dong[+inp.getAttribute('data-lc-nv')];
+        const tu = khongDau(inp.value).split(' ').filter(Boolean);
+        if (!tu.length){ anGoiY(); return; }
+        const kq = [];
+        for (const x of st._nvIdx){ if (tu.every(t=> x.key.indexOf(t) >= 0)) kq.push(x); }
+        const cuoi = tu[tu.length-1];
+        const cungKhoa = new Map();
+        const laCungKhoa = k=>{ if (!d || !d.khoa || !k) return false; if (!cungKhoa.has(k)) cungKhoa.set(k, khoaGanDung(d.khoa, k)); return cungKhoa.get(k); };
+        kq.forEach(x=>{ x._diem = (laCungKhoa(x.khoa) ? 0 : 2) + (x.key.split(' ').indexOf(cuoi) >= 0 ? 0 : 1); });
+        kq.sort((a,b)=> a._diem - b._diem || a.e.hoTen.localeCompare(b.e.hoTen,'vi'));
+        const top = kq.slice(0, 15);
+        goiY._ds = top; goiY._inp = inp; goiY._sel = 0;
+        goiY.innerHTML = top.length ? top.map((x,k)=>`<div data-k="${k}" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid #eef2ef;${k===0?'background:#e8f3ec':''}">${escHtml(x.e.hoTen)} <span class="muted" style="font-size:12.5px">— ${escHtml(x.khoa||'Chưa có khoa')}${x.e.soCCHN?' — '+escHtml(x.e.soCCHN):''}</span></div>`).join('') + (kq.length > 15 ? `<div class="muted" style="padding:6px 12px;font-size:12px">… còn ${kq.length-15} người — gõ thêm chữ để lọc</div>` : '')
+          : '<div class="muted" style="padding:8px 12px">Không có nhân viên nào khớp — có thể chưa có trên phần mềm.</div>';
+        const r = inp.getBoundingClientRect();
+        goiY.style.left = r.left + 'px'; goiY.style.top = (r.bottom + 2) + 'px'; goiY.style.minWidth = Math.max(r.width, 380) + 'px'; goiY.style.display = 'block';
+        goiY.querySelectorAll('[data-k]').forEach(el=> el.onmousedown = ev=>{ ev.preventDefault(); chonNV(inp, top[+el.getAttribute('data-k')].e); });
+      };
+      box.querySelectorAll('[data-lc-nv]').forEach(inp=>{
+        let hen = null;
+        inp.oninput = ()=>{ clearTimeout(hen); hen = setTimeout(()=> loc(inp), 120); };
+        inp.onfocus = ()=>{ if (inp.value.trim()) loc(inp); };
+        inp.onblur = ()=> setTimeout(()=>{ if (goiY._inp === inp) anGoiY(); }, 150);
+        inp.onkeydown = ev=>{
+          if (goiY._inp !== inp || !goiY._ds) return;
+          const n = goiY._ds.length;
+          if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp'){
+            ev.preventDefault(); if (!n) return;
+            goiY._sel = (goiY._sel + (ev.key === 'ArrowDown' ? 1 : n - 1)) % n;
+            goiY.querySelectorAll('[data-k]').forEach((el,k)=>{ el.style.background = k === goiY._sel ? '#e8f3ec' : ''; if (k === goiY._sel) el.scrollIntoView({ block:'nearest' }); });
+          } else if (ev.key === 'Enter'){ ev.preventDefault(); if (n) chonNV(inp, goiY._ds[goiY._sel].e); }
+          else if (ev.key === 'Escape'){ anGoiY(); }
+        };
       });
       box.querySelector('#lc-bo').onclick = ()=>{ if (confirm('Bỏ danh sách đang xem trước?')){ st.dong = []; st.tenFileExcel = ''; st._acts = {}; renderNhapLopCme(wrap); } };
       box.querySelector('#lc-ghi').onclick = ()=> ghiNhan();
@@ -7667,7 +7736,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
           <td style="font-size:12.5px">${escHtml(l.createdBy)||'—'}<br>${fmtDate(String(l.createdAt||'').slice(0,10))}</td>
           <td>${l.trangThai==='Đã huỷ' ? '<span class="pill red">Đã huỷ</span>' : '<span class="pill green">Đã ghi nhận</span>'}</td>
           <td style="white-space:nowrap">${l.trangThai==='Đã huỷ'?'':`<button class="small-btn" data-lc-hoso="${i}">📁 Hồ sơ lớp (${(l.files||[]).length} file)</button> <button class="small-btn" data-lc-ingcn="${i}">🖨️ In giấy chứng nhận</button><br><button class="ghost small-btn" data-lc-phuluc="${i}">📝 Phụ lục DS (Word)</button> <button class="ghost small-btn" data-lc-duthao="${i}">📝 Dự thảo QĐ cấp GCN</button><br>`}<button class="ghost small-btn" data-lc-xemds="${i}">📋 Danh sách</button> ${l.trangThai==='Đã huỷ'?'':`<button class="ghost small-btn" data-lc-huy="${i}">🗑️ Huỷ cả lớp</button>`}</td></tr>
-          <tr id="lc-ct-${i}" style="display:none"><td colspan="9"><table><thead><tr><th>STT</th><th>Họ tên</th><th>Ngày sinh</th><th>Khoa/Phòng – Đơn vị</th><th>Vai trò</th><th>Giờ</th><th>Số GCN</th><th></th></tr></thead><tbody>${(l.hoatDong||[]).map((h,j)=>`<tr><td>${j+1}</td><td>${escHtml(h.empName)}</td><td>${h.ngaySinh?fmtDate(h.ngaySinh):''}</td><td>${escHtml(h.ngoaiVien ? h.donViCongTac : h.donViName)}</td><td>${escHtml(h.vaiTro||'')}</td><td>${h.gio}</td><td style="white-space:nowrap">${escHtml(h.soGCN||'')}</td><td>${l.trangThai==='Đã huỷ'?'':`<a href="#" data-lc-in1="${i}:${j}">🖨️ In</a>`}</td></tr>`).join('')}</tbody></table></td></tr>`).join('')}</tbody></table>`);
+          <tr id="lc-ct-${i}" style="display:none"><td colspan="9"><table><thead><tr><th>STT</th><th>Họ tên</th><th>Ngày sinh</th><th>Khoa/Phòng – Đơn vị</th><th>Vai trò</th><th>Giờ</th><th>Số GCN</th><th></th></tr></thead><tbody>${(l.hoatDong||[]).map((h,j)=>`<tr style="${h.daHuy?'background:#fdf0ef;color:#999;text-decoration:line-through':''}"><td>${j+1}</td><td>${escHtml(h.empName)}</td><td>${h.ngaySinh?fmtDate(h.ngaySinh):''}</td><td>${escHtml(h.ngoaiVien ? h.donViCongTac : h.donViName)}</td><td>${escHtml(h.vaiTro||'')}</td><td>${h.gio}</td><td style="white-space:nowrap">${escHtml(h.soGCN||'')}</td><td style="white-space:nowrap;text-decoration:none">${l.trangThai==='Đã huỷ'?'':(h.daHuy ? `<span class="pill red" title="${escHtml(h.lyDoHuy||'')}">Đã huỷ</span>` : `<a href="#" data-lc-in1="${i}:${j}">🖨️ In</a> &nbsp; <a href="#" data-lc-huy1="${i}:${j}" style="color:var(--red)">✖ Huỷ</a>`)}</td></tr>`).join('')}</tbody></table></td></tr>`).join('')}</tbody></table>`);
       box.querySelectorAll('[data-lc-ingcn]').forEach(b=> b.onclick = ()=> moInGiayChungNhan(ds[+b.getAttribute('data-lc-ingcn')]));
       box.querySelectorAll('[data-lc-in1]').forEach(a=> a.onclick = ev=>{ ev.preventDefault(); const [i,j] = a.getAttribute('data-lc-in1').split(':').map(Number); moInGiayChungNhan(ds[i], [j]); });
       box.querySelectorAll('[data-lc-phuluc]').forEach(b=> b.onclick = ()=> xuatPhuLucDanhSachGCN(ds[+b.getAttribute('data-lc-phuluc')]));
@@ -7675,6 +7744,36 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       box.querySelectorAll('[data-lc-hoso]').forEach(b=> b.onclick = ()=> moHoSoLop(ds[+b.getAttribute('data-lc-hoso')], ()=> veDanhSachLop()));
       box.querySelectorAll('[data-lc-xemds]').forEach(b=> b.onclick = ()=>{ const r = box.querySelector('#lc-ct-'+b.getAttribute('data-lc-xemds')); r.style.display = r.style.display==='none' ? '' : 'none'; });
       box.querySelectorAll('[data-lc-xemfile]').forEach(a=> a.onclick = async ev=>{ ev.preventDefault(); const l = ds[+a.getAttribute('data-lc-xemfile')]; openEvidenceFilesModal({ bangChungFilesLop: l.files }); });
+      // Huỷ 1 người trong lớp (nhập nhầm người, người không đủ điều kiện…): gỡ giờ khỏi hồ sơ người đó,
+      // chuyển phiếu sang "Đã từ chối / huỷ", đánh dấu "Đã huỷ" trong danh sách lớp. Số GCN của người đó không cấp lại cho ai khác.
+      box.querySelectorAll('[data-lc-huy1]').forEach(a=> a.onclick = ev=>{
+        ev.preventDefault();
+        const [i,j] = a.getAttribute('data-lc-huy1').split(':').map(Number);
+        const l = ds[i], h = (l.hoatDong||[])[j];
+        if (!h || h.daHuy) return;
+        openReasonModal('Huỷ "' + h.empName + '" khỏi lớp "' + l.tenHoatDong + '"' + (h.soGCN ? ' — GCN số ' + h.soGCN : ''), 'Lý do huỷ (VD: nhập nhầm người, không tham dự, không đạt…)' + (h.ngoaiVien ? '' : ' — ' + h.gio + ' giờ tín chỉ của lớp này sẽ bị gỡ khỏi hồ sơ người này') + ':', async (reason)=>{
+          try {
+            if (h.empId && h.actId){
+              const acts = await getActivities(h.empId, true);
+              await saveActivities(h.empId, acts.filter(x=> x.id !== h.actId));
+              invalidateHours(h.empId);
+              const bo = state.approvedLog.filter(p=> p.id === h.actId);
+              state.approvedLog = state.approvedLog.filter(p=> p.id !== h.actId);
+              bo.forEach(p=> state.rejectedLog.unshift(Object.assign({}, p, { rejectedAt: todayISO(), lyDo: 'Huỷ khỏi lớp CME "' + l.tenHoatDong + '": ' + reason })));
+              await saveApprovedLog(); await saveRejectedLog();
+            }
+            h.daHuy = true; h.huyAt = new Date().toISOString(); h.lyDoHuy = reason; h.huyBoi = state.adminUserName || '';
+            l.soNguoi = Math.max(0, (l.soNguoi||0) - 1);
+            if (h.ngoaiVien) l.soNgoaiVien = Math.max(0, (l.soNgoaiVien||0) - 1);
+            else l.tongGio = Math.max(0, (l.tongGio||0) - (Number(h.gio)||0));
+            await window.storage.set('cme_lop:' + l.id, JSON.stringify(l), true);
+          } catch(err){ alert('⚠ Chưa huỷ được (lỗi mạng hoặc máy chủ): ' + (err && err.message || err) + '\nVui lòng thử lại.'); return; }
+          alert('✅ Đã huỷ "' + h.empName + '" khỏi lớp' + (h.ngoaiVien ? '.' : ' và gỡ ' + h.gio + ' giờ tín chỉ khỏi hồ sơ.') + (h.soGCN ? '\nSố GCN ' + h.soGCN + ' không cấp lại cho người khác.' : ''));
+          await veDanhSachLop();
+          const idx = ds.findIndex(x=> x.id === l.id);
+          const moLai = document.querySelector('#lc-ct-' + (idx >= 0 ? idx : i)); if (moLai) moLai.style.display = '';
+        });
+      });
       box.querySelectorAll('[data-lc-huy]').forEach(b=> b.onclick = ()=>{
         const l = ds[+b.getAttribute('data-lc-huy')];
         openReasonModal('Huỷ cả lớp "' + l.tenHoatDong + '" (' + l.soNguoi + ' người)', 'Lý do huỷ (VD: nhập nhầm danh sách, sai số giờ…) — toàn bộ giờ tín chỉ của lớp này sẽ bị gỡ khỏi hồ sơ từng người:', async (reason)=>{
