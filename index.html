@@ -1009,6 +1009,7 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       }
       return e;
     });
+    chupAnhNhanVien(state.employees);
     state.pending = pending;
     state.approvedLog = approvedLog;
     state.rejectedLog = rejectedLog;
@@ -1115,6 +1116,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
     state.config.deletedEmployeeIds = Array.from(new Set([].concat(state.config.deletedEmployeeIds||[], ids)));
     await saveConfig();
   }
+  // b34: SỬA LỖI "đã tick Đủ điều kiện hướng dẫn rồi mà hôm sau mất". Nguyên nhân: khi ghép dữ liệu,
+  // bản cũ lấy TOÀN BỘ nhân viên trong bộ nhớ đè lên máy chủ. Máy nào mở app từ trước (chưa bấm Làm mới)
+  // mà lưu bất kỳ thay đổi nhân viên nào (sửa 1 người, khoa tick 1 người…) sẽ đè bản CŨ của tất cả
+  // người khác lên → dấu tick người khác vừa làm bị xoá ngược. Nay chụp ảnh từng nhân viên lúc tải;
+  // khi lưu CHỈ đè những người THỰC SỰ được sửa ở máy này, người không sửa thì giữ bản mới nhất trên máy chủ.
+  let _empSnap = {};
+  function chupAnhNhanVien(arr){
+    _empSnap = {};
+    (arr||[]).forEach(e=>{ if (e && e.id) _empSnap[e.id] = JSON.stringify(e); });
+  }
   async function saveEmployees(){
     // AN TOÀN HƠN bản cũ: bản cũ ghi đè NGUYÊN KHỐI toàn bộ mảng employees đang có trong bộ nhớ —
     // nếu tab đang mở đã cũ (mở trước khi người khác/khoa khác vừa lưu thay đổi ở nơi khác), thao
@@ -1131,12 +1142,16 @@ https://github.com/nodeca/pako/blob/main/LICENSE
       } catch(e){ latest = []; }
       const merged = {};
       latest.forEach(e=>{ if (e && e.id) merged[e.id] = e; });
-      (state.employees||[]).forEach(e=>{ if (e && e.id) merged[e.id] = e; });
+      (state.employees||[]).forEach(e=>{
+        if (!e || !e.id) return;
+        const khongDoi = merged[e.id] && _empSnap[e.id] !== undefined && _empSnap[e.id] === JSON.stringify(e);
+        if (!khongDoi) merged[e.id] = e; // chỉ đè người đã sửa/ thêm mới ở máy này
+      });
       // Nhân viên đã xoá/từ chối/gộp thì không cộng lại từ bản trên máy chủ (trước đây bị hiện lại).
       const daXoaNV = new Set(state.config.deletedEmployeeIds||[]);
       const mergedArr = Object.values(merged).filter(e=> !daXoaNV.has(e.id));
       const res = await window.storage.set('employees', JSON.stringify(mergedArr), true);
-      if (res) state.employees = mergedArr; // đồng bộ lại bộ nhớ hiện tại theo đúng bản đã ghép
+      if (res){ state.employees = mergedArr; chupAnhNhanVien(mergedArr); } // đồng bộ lại bộ nhớ theo bản đã ghép
     } catch(err){ console.error('saveEmployees lỗi:', err); }
   }
   async function savePending(){ await syncRecordCollection('cnkt_pending', state.pending, _pendingSnap); }
